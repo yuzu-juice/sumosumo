@@ -15,6 +15,7 @@
 - **逆ジオコーディング**: クリック位置から町丁目住所を特定（外部API非依存）
 - **住所→緯度経度**: D1の住所辞書（新宿区公式データ由来）で解決
 - **周辺施設検索**: 買い物・医療・交通・公共施設・学校・子育て・避難所を徒歩圏内で表示（D1のみ参照）
+- **町丁目プロフィール**: 年齢構成人口・世帯数・通学区域・AED・公園を物件地点ごとに表示
 - **徒歩時間ベースの距離制限**: カテゴリごとの徒歩圏（例: 避難所=徒歩15分、駅=徒歩20分）で意味のある施設のみ表示
 - **地図UI**: 全画面マップ。クリックでピンを配置し、ドラッグで位置を微調整
 - **浸水レイヤー**: 河川浸水（青）と高潮浸水（オレンジ）を色分けして表示
@@ -34,12 +35,20 @@
 | 2 | 新宿区 公共施設一覧 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399965.csv |
 | 3 | 新宿区 教育機関一覧 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399985.csv |
 | 4 | 新宿区 子育て施設一覧 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399969.csv |
-| 5 | 東京都防災マップ 避難所・避難場所一覧データ | 東京都 | https://www.opendata.metro.tokyo.lg.jp/soumu/130001_evacuation_center.csv |
-| 6 | 神田川流域浸水予想区域図（河川浸水） | 東京都建設局 | https://www.opendata.metro.tokyo.lg.jp/kensetsu/R3/shinsui_kandagawa.csv |
-| 7 | 高潮浸水想定区域図（想定最大規模） | 東京都港湾局 | https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d0000000029 |
-| 8 | 標高タイル（坂道・標高表示） | 国土地理院 | https://maps.gsi.go.jp/development/ichiran.html |
-| 9 | 新宿区 行政境界（選択範囲） | OpenStreetMap | https://www.openstreetmap.org/copyright |
+| 5 | 新宿区 地域・年齢別人口 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399968.csv |
+| 6 | 新宿区 指定緊急避難場所一覧 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399967.csv |
+| 7 | 新宿区 AED設置個所一覧 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399971.csv |
+| 8 | 新宿区 小学校通学区域情報 | 新宿区 | https://www.city.shinjuku.lg.jp/content/000399976.csv |
+| 9 | 東京都 都市公園・都立公園一覧 | 東京都 | https://www.opendata.metro.tokyo.lg.jp/shinjyuku/131041_shinjukuku_toshitoritukouen.csv |
 | 10 | OpenStreetMap 施設・道路・建物データ | OpenStreetMap | https://www.openstreetmap.org/copyright |
+
+補助データ（避難所・浸水・高潮・公衆トイレ・標高・行政境界など）も利用しています:
+- 東京都防災マップ 避難所: https://www.opendata.metro.tokyo.lg.jp/soumu/130001_evacuation_center.csv
+- 神田川流域浸水予想区域図: https://www.opendata.metro.tokyo.lg.jp/kensetsu/R3/shinsui_kandagawa.csv
+- 高潮浸水想定区域図: https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d0000000029
+- 新宿区 公衆トイレ一覧: https://www.city.shinjuku.lg.jp/content/000399974.csv
+- 標高タイル: https://maps.gsi.go.jp/development/ichiran.html
+- 新宿区 行政境界（OpenStreetMap）
 
 浸水想定区域データは、東京都の「浸水予想区域図」を利用しています。このデータは**川からの溢水（外水氾濫）と下水道の能力超過による窪地の浸水（内水氾濫）の両方**を含む統合浸水深です（東京都公式notesより）。高潮は東京都港湾局の「高潮浸水想定区域図（想定最大規模）」を、新宿区行政境界内のグリッドで抽出して利用しています。
 
@@ -83,6 +92,7 @@ npx wrangler r2 bucket create odh-raw  # R2作成（初回のみ、既存なら�
 | 道路ノード標高（坂道表示） | `npm run add:elev` | collect:roads後 |
 | 地図タイル（自前配信） | `npm run collect:tiles` | 手動 |
 | 浸水想定区域（洪水レイヤー） | `npm run collect:flood` | 手動 |
+| 町丁目プロフィール（人口/AED/公園/避難場所/学区） | `npm run collect:profile` | 手動 |
 | 住所辞書 | `npm run build:geodict` | 公式データ更新時 |
 | 避難所（東京都） | `npm run collect:disaster` | 毎日3:00 Cron（自動） |
 
@@ -129,6 +139,9 @@ MCPクライアント（Claude Desktop等）から接続する場合:
 - `get_risk` — 最寄り町丁目の地震地域危険度ランク
 - `get_crime` — 最寄り町丁目の犯罪認知件数
 - `get_flood` — 周辺の浸水想定リスク（河川・高潮）
+- `get_demographics` — 最寄り町丁目の人口・年齢構成
+- `get_shelters` — 周辺の指定緊急避難場所（災害種別付き）
+- `get_school_zone` — 最寄り町丁目の通学区域（小学校）
 
 ## テスト
 

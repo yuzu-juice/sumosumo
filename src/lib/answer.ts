@@ -62,8 +62,11 @@ type Topic = 'crime' | 'disaster' | 'shopping' | 'medical' | 'transport' | 'risk
 
 export function detectTopic(q: string): Topic | null {
   if (/治安|犯罪|安全|怖|事件/.test(q)) return 'crime';
+  // 避難・避難所は洪水・地震より優先（防災リスク全体を扱う）
+  if (/避難|避難所|避難場所|災害時/.test(q)) return 'disaster';
   if (/地震|危険度|倒壊|火災リスク|揺れ/.test(q)) return 'risk';
-  if (/洪水|浸水|避難|災害|津波|水害|大雨/.test(q)) return 'disaster';
+  if (/洪水|浸水|災害|津波|水害|大雨/.test(q)) return 'disaster';
+  if (/人口|年齢|住みやすさ|世代|家族構成/.test(q)) return 'public';
   if (/図書館|公共|区役所|役所|公園|体育館|プール/.test(q)) return 'public';
   if (/保育園|幼稚園|子育て|学童|児童館/.test(q)) return 'childcare';
   if (/学校|小学校|中学校|高校|通学/.test(q)) return 'education';
@@ -93,6 +96,16 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
     for (const f of facts.facilities.disaster || []) {
       lines.push(`避難所: ${f.name}（${formatDistance(f.distanceM)}）`);
     }
+    for (const s of facts.emergencyShelters || []) {
+      const types = [
+        s.flood ? '洪水' : '',
+        s.landslide ? '崖崩れ' : '',
+        s.stormSurge ? '高潮' : '',
+        s.earthquake ? '地震' : '',
+        s.fire ? '大規模火事' : '',
+      ].filter(Boolean).join('・');
+      lines.push(`指定緊急避難場所: ${s.name}（${formatDistance(s.distanceM)}, 対応: ${types || '不明'}）`);
+    }
     for (const r of facts.rules) {
       if (r.category === 'disaster') lines.push(`[防災] ${r.title}: ${r.body}`);
     }
@@ -110,10 +123,22 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
     for (const f of facts.facilities.transport || []) lines.push(`駅: ${f.name}（${formatDistance(f.distanceM)}）`);
   }
   if (topic === 'public') {
+    if (facts.demographics) {
+      const d = facts.demographics;
+      const child = d.age0_4 + d.age5_9 + d.age10_14;
+      const working = d.age15_19 + d.age20_24 + d.age25_29 + d.age30_34 + d.age35_39 + d.age40_44 + d.age45_49 + d.age50_54 + d.age55_59 + d.age60_64;
+      const elderly = d.age65_69 + d.age70_74 + d.age75_79 + d.age80_84 + d.age85Plus;
+      const pct = (n: number) => (d.totalPop > 0 ? Math.round((n / d.totalPop) * 100) : 0);
+      lines.push(`${d.town}: 総人口${d.totalPop}人、14歳以下${pct(child)}%、15〜64歳${pct(working)}%、65歳以上${pct(elderly)}%、若年層(20〜34歳)${pct(d.age20_24 + d.age25_29 + d.age30_34)}%（出典: 新宿区 地域・年齢別人口）`);
+    }
     for (const f of facts.facilities.public || []) lines.push(`公共施設: ${f.name}（${formatDistance(f.distanceM)}）`);
+    if (facts.aed?.length) lines.push(`AED: ${facts.aed[0].name}（${formatDistance(facts.aed[0].distanceM)}）`);
+    if (facts.toilets?.length) lines.push(`公衆トイレ: ${facts.toilets[0].name}（${formatDistance(facts.toilets[0].distanceM)}）`);
+    if (facts.parks?.length) lines.push(`公園: ${facts.parks[0].name}（${formatDistance(facts.parks[0].distanceM)}）`);
   }
   if (topic === 'education') {
     for (const f of facts.facilities.education || []) lines.push(`学校: ${f.name}（${formatDistance(f.distanceM)}）`);
+    if (facts.schoolZone) lines.push(`この地点の通学区域: ${facts.schoolZone}（出典: 新宿区 小学校通学区域）`);
   }
   if (topic === 'childcare') {
     for (const f of facts.facilities.childcare || []) lines.push(`子育て施設: ${f.name}（${formatDistance(f.distanceM)}）`);
@@ -164,6 +189,42 @@ export function buildContext(facts: AnswerFacts): string {
     parts.push(
       `【浸水想定（選択地点周辺500mの最大値）】${river}、${storm}（出典: 東京都建設局 神田川流域浸水予想区域図 / 東京都港湾局 高潮浸水想定区域図）`,
     );
+  }
+  // 町丁目プロフィール（人口構成・学区・生活快適データ）
+  if (facts.demographics) {
+    const d = facts.demographics;
+    const child = d.age0_4 + d.age5_9 + d.age10_14; // 14歳以下
+    const working = d.age15_19 + d.age20_24 + d.age25_29 + d.age30_34 + d.age35_39 + d.age40_44 + d.age45_49 + d.age50_54 + d.age55_59 + d.age60_64; // 15-64歳
+    const elderly = d.age65_69 + d.age70_74 + d.age75_79 + d.age80_84 + d.age85Plus; // 65歳以上
+    const pct = (n: number) => (d.totalPop > 0 ? Math.round((n / d.totalPop) * 100) : 0);
+    parts.push(
+      `【町丁目人口（${d.town}）】総人口${d.totalPop}人（世帯数${d.households ?? '不明'}）。14歳以下${child}人(${pct(child)}%)、15〜64歳${working}人(${pct(working)}%)、65歳以上${elderly}人(${pct(elderly)}%)。若年層(20〜34歳)は${pct(d.age20_24 + d.age25_29 + d.age30_34)}%。（出典: 新宿区 地域・年齢別人口）`,
+    );
+  }
+  if (facts.schoolZone) {
+    parts.push(`【通学区域】この地点は「${facts.schoolZone}」の学区です。（出典: 新宿区 小学校通学区域）`);
+  }
+  if (facts.aed?.length) {
+    parts.push(`【AED】最寄りは「${facts.aed[0].name}」まで約${Math.round(facts.aed[0].distanceM)}m。（出典: 新宿区 AED設置個所一覧）`);
+  }
+  if (facts.toilets?.length) {
+    const t = facts.toilets[0];
+    parts.push(`【公衆トイレ】最寄りは「${t.name}」まで約${Math.round(t.distanceM)}m。（出典: 新宿区 公衆トイレ一覧）`);
+  }
+  if (facts.parks?.length) {
+    const p = facts.parks[0];
+    parts.push(`【公園】最寄りは「${p.name}」まで約${Math.round(p.distanceM)}m。（出典: 東京都 都市公園一覧）`);
+  }
+  if (facts.emergencyShelters?.length) {
+    const s = facts.emergencyShelters[0];
+    const types = [
+      s.flood ? '洪水' : '',
+      s.landslide ? '崖崩れ' : '',
+      s.stormSurge ? '高潮' : '',
+      s.earthquake ? '地震' : '',
+      s.fire ? '大規模火事' : '',
+    ].filter(Boolean).join('・');
+    parts.push(`【指定緊急避難場所】最寄りは「${s.name}」まで約${Math.round(s.distanceM)}m（対応: ${types || '不明'}）。（出典: 新宿区 指定緊急避難場所）`);
   }
   const labels = {
     shopping: '買い物',

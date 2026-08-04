@@ -32,6 +32,24 @@ interface AskResponse {
   risk?: { town: string; collapseRank: number; fireRank: number; totalRank: number } | null;
   crime?: { town: string; totalCrimes: number; year: number } | null;
   flood?: { riverMax: number; stormMax: number } | null;
+  demographics?: {
+    town: string;
+    totalPop: number;
+    households: number | null;
+    age0_4: number; age5_9: number; age10_14: number; age15_19: number;
+    age20_24: number; age25_29: number; age30_34: number; age35_39: number;
+    age40_44: number; age45_49: number; age50_54: number; age55_59: number;
+    age60_64: number; age65_69: number; age70_74: number; age75_79: number;
+    age80_84: number; age85Plus: number;
+  } | null;
+  aed?: Array<{ name: string; distanceM: number }> | null;
+  toilets?: Array<{ name: string; distanceM: number }> | null;
+  parks?: Array<{ name: string; distanceM: number }> | null;
+  emergencyShelters?: Array<{
+    name: string; distanceM: number; flood: boolean; landslide: boolean;
+    stormSurge: boolean; earthquake: boolean; fire: boolean; capacity: number | null;
+  }> | null;
+  schoolZone?: string | null;
   question: string;
 }
 
@@ -532,6 +550,36 @@ async function ask(body: {
 
 function renderReport(data: AskResponse) {
   reportEl.innerHTML = '';
+  // 町丁目プロフィール（人口構成・学区・生活快適データ）
+  if (data.demographics) {
+    const d = data.demographics;
+    const total = d.totalPop;
+    const groups: Array<{ label: string; n: number }> = [
+      { label: '0-14歳', n: d.age0_4 + d.age5_9 + d.age10_14 },
+      { label: '15-29歳', n: d.age15_19 + d.age20_24 + d.age25_29 },
+      { label: '30-44歳', n: d.age30_34 + d.age35_39 + d.age40_44 },
+      { label: '45-64歳', n: d.age45_49 + d.age50_54 + d.age55_59 + d.age60_64 },
+      { label: '65歳以上', n: d.age65_69 + d.age70_74 + d.age75_79 + d.age80_84 + d.age85Plus },
+    ];
+    const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+    const bars = groups
+      .map((g) => `<div class="prof-row"><span class="prof-label">${g.label}</span><div class="prof-bar"><div class="prof-fill" style="width:${Math.max(pct(g.n), 2)}%"></div></div><span class="prof-pct">${pct(g.n)}%</span></div>`)
+      .join('');
+    const extras = [
+      data.schoolZone ? `<span class="prof-chip">学区: ${escapeHtml(data.schoolZone)}</span>` : '',
+      data.aed?.length ? `<span class="prof-chip">AED ${fmtDist(data.aed[0].distanceM)}</span>` : '',
+      data.parks?.length ? `<span class="prof-chip">公園 ${fmtDist(data.parks[0].distanceM)}</span>` : '',
+    ].filter(Boolean).join('');
+    const prof = document.createElement('section');
+    prof.className = 'profile-card';
+    prof.style.setProperty('--rc', '#6b5b95');
+    prof.innerHTML =
+      `<div class="r-cat">この町丁目の人々</div>` +
+      `<div class="prof-town">${escapeHtml(d.town)} <span class="prof-pop">人口 ${total.toLocaleString()}人${d.households ? `・世帯 ${d.households.toLocaleString()}` : ''}</span></div>` +
+      `<div class="prof-bars">${bars}</div>` +
+      (extras ? `<div class="prof-chips">${extras}</div>` : '');
+    reportEl.appendChild(prof);
+  }
   const cards: Array<{ key: string; title: string; color: string }> = [
     { key: 'transport', title: '最寄り駅', color: CAT_COLORS.transport },
     { key: 'shopping', title: '買い物', color: CAT_COLORS.shopping },

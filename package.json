@@ -21,6 +21,7 @@
     "collect:elev": "node scripts/collect-elev.mjs",
     "add:elev": "node scripts/add-elev.mjs",
     "collect:official": "node scripts/collect-official.mjs",
+    "collect:profile": "node scripts/collect-profile.mjs",
     "build:geodict": "node scripts/build-geodict.mjs",
     "collect:disaster": "wrangler d1 execute odh-db --remote --command \"DELETE FROM facilities WHERE category='disaster';\" && curl -s -X POST https://odh.tokyo-odh-165-233.workers.dev/api/collect -H \"x-collect-token: $COLLECT_TOKEN\"",
     "collect:local": "wrangler dev --local --test-scheduled"

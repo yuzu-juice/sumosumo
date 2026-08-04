@@ -179,6 +179,12 @@ async function handleAsk(request: Request, env: Env, ctx: ExecutionContext): Pro
       risk: facts.risk,
       crime: facts.crime,
       flood: facts.flood,
+      demographics: facts.demographics,
+      aed: facts.aed,
+      toilets: facts.toilets,
+      parks: facts.parks,
+      emergencyShelters: facts.emergencyShelters,
+      schoolZone: facts.schoolZone,
       question,
     });
   } catch (e) {
@@ -223,6 +229,12 @@ async function handleReview(request: Request, env: Env, ctx: ExecutionContext): 
       risk: facts.risk,
       crime: facts.crime,
       flood: facts.flood,
+      demographics: facts.demographics,
+      aed: facts.aed,
+      toilets: facts.toilets,
+      parks: facts.parks,
+      emergencyShelters: facts.emergencyShelters,
+      schoolZone: facts.schoolZone,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

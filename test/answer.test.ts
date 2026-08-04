@@ -37,6 +37,23 @@ const facts: AnswerFacts = {
       updatedAt: '2026-03-25',
     },
   ],
+  demographics: {
+    town: '歌舞伎町1丁目',
+    lat: 35.6938,
+    lon: 139.7034,
+    totalPop: 156,
+    households: 90,
+    age0_4: 5, age5_9: 4, age10_14: 3, age15_19: 8,
+    age20_24: 12, age25_29: 11, age30_34: 10, age35_39: 9,
+    age40_44: 8, age45_49: 7, age50_54: 6, age55_59: 5,
+    age60_64: 6, age65_69: 8, age70_74: 9, age75_79: 10,
+    age80_84: 15, age85Plus: 20,
+  },
+  aed: [{ name: '区役所', lat: 35.6938, lon: 139.7034, distanceM: 10 }],
+  emergencyShelters: [
+    { name: '新宿御苑', lat: 35.6865, lon: 139.7149, distanceM: 688, flood: false, landslide: false, stormSurge: false, earthquake: true, fire: false, capacity: null },
+  ],
+  schoolZone: '花園',
 };
 
 describe('buildContext', () => {
@@ -112,5 +129,19 @@ describe('extractTopicFacts', () => {
   it('riskトピックは危険度ランクを含む', () => {
     const out = extractTopicFacts(factsWithData, 'risk');
     expect(out).toContain('総合ランク1');
+  });
+  it('disasterトピックは指定緊急避難場所と災害種別を含む', () => {
+    const out = extractTopicFacts(factsWithData, 'disaster');
+    expect(out).toContain('新宿御苑');
+    expect(out).toContain('地震');
+  });
+  it('educationトピックは通学区域を含む', () => {
+    const out = extractTopicFacts(factsWithData, 'education');
+    expect(out).toContain('花園');
+  });
+  it('publicトピックは人口構成を含む', () => {
+    const out = extractTopicFacts(factsWithData, 'public');
+    expect(out).toContain('歌舞伎町1丁目');
+    expect(out).toContain('総人口156');
   });
 });

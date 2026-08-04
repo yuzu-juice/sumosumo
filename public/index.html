@@ -537,6 +537,33 @@
     .rep .r-src { display: block; margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px dashed var(--line-on-paper); font-family: var(--font-mono); font-size: 0.58rem; color: var(--ink-dim-on-paper); line-height: 1.6; }
     .rep .r-src a { color: var(--ink-dim-on-paper); text-decoration: underline; text-underline-offset: 2px; }
     .rep .r-src a:hover { color: var(--vermilion-on-paper); }
+
+    /* 町丁目プロフィールカード */
+    .profile-card {
+      background: linear-gradient(135deg, rgba(107,91,149,0.06), transparent 60%), var(--paper-2);
+      border: 1px solid var(--line-on-paper);
+      border-radius: var(--radius);
+      padding: 0.9rem 1rem;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 0.7rem;
+      animation: cardUp 0.4s ease both;
+    }
+    .profile-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--rc, var(--ink-dim-on-paper)); }
+    .prof-town { font-weight: 800; font-size: 1rem; color: var(--ink-on-paper); margin: 0.4rem 0 0.6rem; }
+    .prof-pop { font-weight: 400; font-size: 0.72rem; color: var(--ink-dim-on-paper); font-family: var(--font-mono); }
+    .prof-bars { display: flex; flex-direction: column; gap: 0.28rem; }
+    .prof-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.68rem; }
+    .prof-label { width: 4.2em; color: var(--ink-dim-on-paper); flex-shrink: 0; }
+    .prof-bar { flex: 1; height: 8px; background: var(--line-on-paper); border-radius: 4px; overflow: hidden; }
+    .prof-fill { height: 100%; background: var(--rc, #6b5b95); border-radius: 4px; transition: width 0.6s ease; }
+    .prof-pct { width: 2.5em; text-align: right; color: var(--ink-dim-on-paper); font-family: var(--font-mono); flex-shrink: 0; }
+    .prof-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.6rem; }
+    .prof-chip {
+      font-size: 0.62rem; color: var(--ink-dim-on-paper);
+      background: var(--paper); border: 1px solid var(--line-on-paper);
+      border-radius: 999px; padding: 0.18rem 0.55rem;
+    }
     .rep .r-fac {
       display: block;
       width: 100%;

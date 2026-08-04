@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import { queryFacilities, queryRules, queryRiskByLocation, queryCrimeByLocation } from './lib/ask';
+import { queryFacilities, queryRules, queryRiskByLocation, queryCrimeByLocation, queryDemographics, queryEmergencyShelters, querySchoolZone } from './lib/ask';
 import { loadNearbyFlood } from './lib/flood';
 import { geocodeAddress } from './lib/geocode';
 import { formatDistance } from './lib/distance';
@@ -203,6 +203,107 @@ export function buildMcpServer(env: Env): McpServer {
       const storm = flood.stormMax > 0 ? `高潮浸水想定最大 ${flood.stormMax.toFixed(1)}m` : '高潮浸水想定なし';
       const text = `${river}、${storm}（周辺500m内の最大値、出典: 東京都建設局/東京都港湾局）`;
       return { content: [{ type: 'text', text }], structuredContent: { center, flood } };
+    },
+  );
+
+  server.registerTool(
+    'get_demographics',
+    {
+      description:
+        '住所または緯度経度を基点に、最寄り町丁目の人口・年齢構成（0-4歳〜85歳以上の階級別人口）を取得する。',
+      inputSchema: z
+        .object({
+          address: z.string().optional().describe('住所（lat/lon未指定時は必須）'),
+          lat: z.number().optional().describe('緯度'),
+          lon: z.number().optional().describe('経度'),
+        })
+        .refine((v) => v.address !== undefined || (v.lat !== undefined && v.lon !== undefined), {
+          message: 'address か lat/lon のどちらかが必要です',
+        }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ address, lat, lon }) => {
+      const center = await resolveCenter(env, address, lat, lon);
+      const d = await queryDemographics(env.DB, center.lat, center.lon);
+      if (!d) {
+        return {
+          content: [{ type: 'text', text: 'この地点の人口データは見つかりませんでした' }],
+          structuredContent: { center, demographics: null },
+        };
+      }
+      const child = d.age0_4 + d.age5_9 + d.age10_14;
+      const working = d.age15_19 + d.age20_24 + d.age25_29 + d.age30_34 + d.age35_39 + d.age40_44 + d.age45_49 + d.age50_54 + d.age55_59 + d.age60_64;
+      const elderly = d.age65_69 + d.age70_74 + d.age75_79 + d.age80_84 + d.age85Plus;
+      const pct = (n: number) => (d.totalPop > 0 ? Math.round((n / d.totalPop) * 100) : 0);
+      const text = `${d.town}: 総人口${d.totalPop}人。14歳以下${pct(child)}%、15〜64歳${pct(working)}%、65歳以上${pct(elderly)}%（出典: 新宿区 地域・年齢別人口）`;
+      return { content: [{ type: 'text', text }], structuredContent: { center, demographics: d } };
+    },
+  );
+
+  server.registerTool(
+    'get_shelters',
+    {
+      description:
+        '住所または緯度経度を基点に、周辺2km内の指定緊急避難場所を災害種別（洪水/崖崩れ/高潮/地震/大規模火事）付きで取得する。',
+      inputSchema: z
+        .object({
+          address: z.string().optional().describe('住所（lat/lon未指定時は必須）'),
+          lat: z.number().optional().describe('緯度'),
+          lon: z.number().optional().describe('経度'),
+        })
+        .refine((v) => v.address !== undefined || (v.lat !== undefined && v.lon !== undefined), {
+          message: 'address か lat/lon のどちらかが必要です',
+        }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ address, lat, lon }) => {
+      const center = await resolveCenter(env, address, lat, lon);
+      const shelters = await queryEmergencyShelters(env.DB, center.lat, center.lon);
+      if (!shelters?.length) {
+        return {
+          content: [{ type: 'text', text: '周辺に指定緊急避難場所は見つかりませんでした' }],
+          structuredContent: { center, shelters: [] },
+        };
+      }
+      const rows = shelters.map((s) => {
+        const types = [
+          s.flood ? '洪水' : '',
+          s.landslide ? '崖崩れ' : '',
+          s.stormSurge ? '高潮' : '',
+          s.earthquake ? '地震' : '',
+          s.fire ? '大規模火事' : '',
+        ].filter(Boolean).join('・');
+        return `${s.name} (${formatDistance(s.distanceM)}, 対応: ${types || '不明'})`;
+      });
+      return {
+        content: [{ type: 'text', text: rows.join('\n') }],
+        structuredContent: { center, shelters },
+      };
+    },
+  );
+
+  server.registerTool(
+    'get_school_zone',
+    {
+      description: '住所または緯度経度を基点に、最寄り町丁目の通学区域（小学校）を取得する。',
+      inputSchema: z
+        .object({
+          address: z.string().optional().describe('住所（lat/lon未指定時は必須）'),
+          lat: z.number().optional().describe('緯度'),
+          lon: z.number().optional().describe('経度'),
+        })
+        .refine((v) => v.address !== undefined || (v.lat !== undefined && v.lon !== undefined), {
+          message: 'address か lat/lon のどちらかが必要です',
+        }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ address, lat, lon }) => {
+      const center = await resolveCenter(env, address, lat, lon);
+      const school = await querySchoolZone(env.DB, center.lat, center.lon);
+      const text = school
+        ? `この地点の通学区域（小学校）: ${school}（出典: 新宿区 小学校通学区域情報）`
+        : 'この地点の通学区域データは見つかりませんでした';
+      return { content: [{ type: 'text', text }], structuredContent: { center, school } };
     },
   );
 
