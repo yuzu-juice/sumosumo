@@ -2,7 +2,7 @@ import { AnswerFacts } from './ask';
 import { CATEGORY_LABELS, Category } from '../types';
 import { formatDistance } from './distance';
 
-const MODEL = '@cf/openai/gpt-oss-20b';
+const MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 // 物件レビューAI: 物件選択時に「この物件の暮らし」を総評として自動生成する
 export async function generateReview(env: { AI: Ai }, facts: AnswerFacts): Promise<string> {
@@ -43,6 +43,8 @@ export async function generateAnswer(
 - 人間らしく・自然な会話で回答する。箇条書きの羅列ではなく、文で説明する。
 - 事実にないことは「データ上確認できません」と明記し、推測・断定はしない。
 - 総合スコア・点数・ランキングは出さない。
+- **緯度・経度の数値は絶対に回答に含めない**。施設名・距離・ランクなどの数値だけを使う。
+- **危険度ランクの解釈**: ランク1〜2は「低い・安全側」、3は「やや高め」、4〜5は「高い」。数値が小さいほど安全。ランク1や2を「高い・危険」と解釈してはならない。
 - 距離・施設名・出典は自然に織り込む。
 - 3〜5文程度の簡潔な回答。質問のニュアンス（例: 「家族で住む」「夜遅く帰る」）を汲み取る。
 
@@ -56,12 +58,14 @@ ${relevant}
   return runAi(env, prompt);
 }
 
-type Topic = 'crime' | 'disaster' | 'shopping' | 'medical' | 'transport' | 'risk';
+type Topic = 'crime' | 'disaster' | 'shopping' | 'medical' | 'transport' | 'risk' | 'public' | 'education';
 
 export function detectTopic(q: string): Topic | null {
   if (/治安|犯罪|安全|怖|事件/.test(q)) return 'crime';
   if (/地震|危険度|倒壊|火災リスク|揺れ/.test(q)) return 'risk';
   if (/洪水|浸水|避難|災害|津波|水害|大雨/.test(q)) return 'disaster';
+  if (/図書館|図書館|公共|区役所|役所|公園|体育館|プール/.test(q)) return 'public';
+  if (/学校|小学校|中学校|高校|学童|保育園|幼稚園|子育て|通学/.test(q)) return 'education';
   if (/買い物|スーパー|コンビニ|買|店/.test(q)) return 'shopping';
   if (/病院|診療|薬局|医療|医者|夜間|救急/.test(q)) return 'medical';
   if (/駅|交通|通勤|電車|バス|徒歩/.test(q)) return 'transport';
@@ -75,10 +79,16 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
   }
   if (topic === 'risk' && facts.risk) {
     lines.push(
-      `地震危険度（${facts.risk.town}）: 総合ランク${facts.risk.totalRank}（ランクは1=低い〜5=高い）、建物倒壊ランク${facts.risk.collapseRank}、火災ランク${facts.risk.fireRank}（出典: 東京都 第9回調査）`,
+      `地震危険度（${facts.risk.town}）: 総合ランク${facts.risk.totalRank}、建物倒壊ランク${facts.risk.collapseRank}、火災ランク${facts.risk.fireRank}。※ランクは1=最も安全〜5=最も危険。1〜2は安全側・低い、3はやや高め、4〜5は高い。数値が小さいほど安全。（出典: 東京都 第9回調査）`,
     );
   }
   if (topic === 'disaster') {
+    if (facts.flood) {
+      const river = facts.flood.riverMax > 0 ? `河川浸水想定最大${facts.flood.riverMax.toFixed(1)}m` : '';
+      const storm = facts.flood.stormMax > 0 ? `高潮浸水想定最大${facts.flood.stormMax.toFixed(1)}m` : '';
+      const both = [river, storm].filter(Boolean).join('、');
+      if (both) lines.push(`浸水想定（選択地点周辺500mの最大値）: ${both}（出典: 東京都建設局 神田川流域浸水予想区域図 / 東京都港湾局 高潮浸水想定区域図）`);
+    }
     for (const f of facts.facilities.disaster || []) {
       lines.push(`避難所: ${f.name}（${formatDistance(f.distanceM)}）`);
     }
@@ -90,10 +100,19 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
     for (const f of facts.facilities.shopping || []) lines.push(`買い物: ${f.name}（${formatDistance(f.distanceM)}）`);
   }
   if (topic === 'medical') {
-    for (const f of facts.facilities.medical || []) lines.push(`医療: ${f.name}（${formatDistance(f.distanceM)}）`);
+    for (const f of facts.facilities.medical || []) {
+      const dept = f.department ? `（診療科目: ${f.department}）` : '';
+      lines.push(`医療: ${f.name}${dept}（${formatDistance(f.distanceM)}）`);
+    }
   }
   if (topic === 'transport') {
     for (const f of facts.facilities.transport || []) lines.push(`駅: ${f.name}（${formatDistance(f.distanceM)}）`);
+  }
+  if (topic === 'public') {
+    for (const f of facts.facilities.public || []) lines.push(`公共施設: ${f.name}（${formatDistance(f.distanceM)}）`);
+  }
+  if (topic === 'education') {
+    for (const f of facts.facilities.education || []) lines.push(`学校: ${f.name}（${formatDistance(f.distanceM)}）`);
   }
   return lines.join('\n');
 }
@@ -101,11 +120,11 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
 async function runAi(env: { AI: Ai }, prompt: string): Promise<string> {
   const res = await env.AI.run(MODEL, {
     messages: [{ role: 'user', content: prompt }],
+    max_tokens: 600,
   });
   const text = extractText(res);
   if (!text) {
-    console.log('AI応答が空。raw=', JSON.stringify(res).slice(0, 500));
-    throw new Error('AI応答が得られませんでした');
+    throw new Error(`AI応答が得られませんでした: ${JSON.stringify(res).slice(0, 300)}`);
   }
   return text;
 }
@@ -114,8 +133,8 @@ async function runAi(env: { AI: Ai }, prompt: string): Promise<string> {
 function extractText(res: unknown): string {
   const r = res as Record<string, unknown>;
   if (typeof r.response === 'string') return r.response;
-  const choices = r.choices as Array<{ message?: { content?: string } }> | undefined;
-  if (Array.isArray(choices) && choices[0]?.message?.content) {
+  const choices = r.choices as Array<{ message?: { content?: string | null } }> | undefined;
+  if (Array.isArray(choices) && typeof choices[0]?.message?.content === 'string') {
     return choices[0].message.content;
   }
   return '';
@@ -123,11 +142,11 @@ function extractText(res: unknown): string {
 
 export function buildContext(facts: AnswerFacts): string {
   const parts: string[] = [];
-  parts.push(`検索地点: ${facts.location.displayName || '指定住所'}（緯度${facts.location.lat}, 経度${facts.location.lon}）`);
+  parts.push(`検索地点: ${facts.location.displayName || '指定住所'}`);
   // 危険度・犯罪は冒頭に置く（LLMが重視しやすい）
   if (facts.risk) {
     parts.push(
-      `【地震地域危険度（${facts.risk.town}）】建物倒壊危険度ランク${facts.risk.collapseRank}、火災危険度ランク${facts.risk.fireRank}、総合危険度ランク${facts.risk.totalRank}（ランクは1=低い〜5=高い。出典: 東京都都市整備局 地震に関する地域危険度測定調査 第9回）`,
+      `【地震地域危険度（${facts.risk.town}）】建物倒壊危険度ランク${facts.risk.collapseRank}、火災危険度ランク${facts.risk.fireRank}、総合危険度ランク${facts.risk.totalRank}。※重要: このランクは1が最も安全（低い）で5が最も危険（高い）。1〜2は「低い・安全側」、3は「やや高め」、4〜5は「高い」を意味する。数値が小さいほど安全。（出典: 東京都都市整備局 地震に関する地域危険度測定調査 第9回）`,
     );
   }
   if (facts.crime) {
@@ -135,18 +154,28 @@ export function buildContext(facts: AnswerFacts): string {
       `【犯罪認知件数（${facts.crime.town}）】${facts.crime.year}年の総認知件数 ${facts.crime.totalCrimes}件（出典: 警視庁 町丁字別犯罪情報）`,
     );
   }
+  if (facts.flood) {
+    const river = facts.flood.riverMax > 0 ? `河川浸水想定最大${facts.flood.riverMax.toFixed(1)}m` : '河川浸水想定なし';
+    const storm = facts.flood.stormMax > 0 ? `高潮浸水想定最大${facts.flood.stormMax.toFixed(1)}m` : '高潮浸水想定なし';
+    parts.push(
+      `【浸水想定（選択地点周辺500mの最大値）】${river}、${storm}（出典: 東京都建設局 神田川流域浸水予想区域図 / 東京都港湾局 高潮浸水想定区域図）`,
+    );
+  }
   const labels = {
     shopping: '買い物',
     medical: '医療',
     transport: '交通',
     disaster: '災害',
+    public: '公共施設',
+    education: '学校',
   } as const;
-  for (const key of ['shopping', 'medical', 'transport', 'disaster'] as const) {
+  for (const key of ['shopping', 'medical', 'transport', 'disaster', 'public', 'education'] as const) {
     const facs = facts.facilities[key];
     if (!facs?.length) continue;
     parts.push(`【${labels[key]}】`);
     for (const f of facs) {
-      parts.push(`- ${f.name}: 約${formatDistance(f.distanceM)}（出典: ${f.source}, 更新${f.updatedAt}）`);
+      const dept = key === 'medical' && f.department ? `（診療科目: ${f.department}）` : '';
+      parts.push(`- ${f.name}${dept}: 約${formatDistance(f.distanceM)}（出典: ${f.source}, 更新${f.updatedAt}）`);
     }
   }
   if (facts.rules.length) {

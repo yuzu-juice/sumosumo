@@ -17,10 +17,11 @@ const SOURCES = [
     latKey: '緯度',
     lonKey: '経度',
     addrKeys: ['所在地_連結表記'],
+    deptKey: '診療科目',
     match: (name) => /クリニック|診療所|医院/.test(name) && !/薬局|薬店/.test(name),
   },
   {
-    category: 'shopping',
+    category: 'public',
     note: '新宿区 公共施設一覧',
     csv: 'https://www.city.shinjuku.lg.jp/content/000399965.csv',
     encoding: 'utf-16le',
@@ -28,10 +29,10 @@ const SOURCES = [
     latKey: '緯度',
     lonKey: '経度',
     addrKeys: ['所在地_連結表記'],
-    match: (name) => /図書館|集積所|施設|センター|会館|公園/.test(name) || true,
+    match: (name) => true,
   },
   {
-    category: 'transport',
+    category: 'education',
     note: '新宿区 教育機関一覧',
     csv: 'https://www.city.shinjuku.lg.jp/content/000399985.csv',
     encoding: 'utf-16le',
@@ -74,7 +75,7 @@ function generateSql(category, rows) {
     `DELETE FROM facilities WHERE category = '${category}' AND source LIKE '新宿区%';`,
     ...rows.map(
       (r) =>
-        `INSERT INTO facilities (category, name, lat, lon, address, source, updated_at) VALUES ('${category}', '${sqlEscape(r.name)}', ${r.lat}, ${r.lon}, '${sqlEscape(r.address)}', '${sqlEscape(r.source)}', '${UPDATED_AT}');`,
+        `INSERT INTO facilities (category, name, lat, lon, address, department, source, updated_at) VALUES ('${category}', '${sqlEscape(r.name)}', ${r.lat}, ${r.lon}, '${sqlEscape(r.address)}', ${r.department !== null ? `'${sqlEscape(r.department)}'` : 'NULL'}, '${sqlEscape(r.source)}', '${UPDATED_AT}');`,
     ),
   ];
   return lines.join('\n');
@@ -92,7 +93,8 @@ async function main() {
       if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       if (!src.match(name)) continue;
       const address = src.addrKeys.map((k) => r[k] || '').join('');
-      out.push({ name, lat, lon, address, source: `${src.note}（新宿区）` });
+      const department = src.deptKey ? (r[src.deptKey] || '').trim() || null : null;
+      out.push({ name, lat, lon, address, department, source: `${src.note}（新宿区）` });
     }
     const seen = new Set();
     const uniq = out.filter((r) => {

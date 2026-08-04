@@ -21,6 +21,8 @@ const facts: AnswerFacts = {
     medical: [],
     transport: [],
     disaster: [],
+    public: [],
+    education: [],
   },
   rules: [
     {

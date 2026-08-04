@@ -6,7 +6,7 @@ import { formatDistance } from './lib/distance';
 import { CATEGORY_LABELS, Category } from './types';
 import type { Env } from './worker';
 
-const CATEGORIES = ['shopping', 'medical', 'transport', 'disaster'] as const;
+const CATEGORIES = ['shopping', 'medical', 'transport', 'disaster', 'public', 'education'] as const;
 
 export function buildMcpServer(env: Env): McpServer {
   const server = new McpServer({ name: 'sumosumo', version: '1.0.0' });
@@ -52,7 +52,7 @@ export function buildMcpServer(env: Env): McpServer {
     async ({ category, address, lat, lon, limit }) => {
       let center = { lat: lat as number, lon: lon as number, displayName: address ?? '' };
       if (address) center = await geocodeAddress(env.DB, address);
-      const cat = category as Exclude<Category, 'garbage'>;
+      const cat = category as Category;
       const facs = await queryFacilities(env.DB, cat, center.lat, center.lon, limit);
       const rows = facs.map((f) => ({
         name: f.name,

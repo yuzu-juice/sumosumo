@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SUMOSUMO — 地図から読み解く暮らしの事実</title>
-  <meta name="description" content="SUMOSUMO は、物件の住所から暮らしの事実をオープンデータで読み解くサービス。AIレビュー・治安・地震危険度・洪水リスク・最寄り駅・買い物環境など、不動産サイトに載っていない情報を根拠付きで表示します。">
+  <title>sumosumo — 地図から読み解く暮らしの事実</title>
+  <meta name="description" content="sumosumo は、物件の住所から暮らしの事実をオープンデータで読み解くサービス。AIレビュー・治安・地震危険度・洪水リスク・最寄り駅・買い物環境など、不動産サイトに載っていない情報を根拠付きで表示します。">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@400;500;700&family=Kosugi+Maru&display=swap" rel="stylesheet">
@@ -143,6 +143,21 @@
     .poi-marker:hover { transform: scale(1.2); }
     .poi-marker.sel { background: #1c1914; color: #fff; width: 26px; height: 26px; border-color: #fff; }
 
+    /* 経路対象として選択中の施設を強調表示 */
+    .poi-marker.hl {
+      width: 30px;
+      height: 30px;
+      font-size: 0.72rem;
+      border-color: var(--vermilion);
+      border-width: 3px;
+      box-shadow: 0 0 0 6px rgba(191, 46, 43, 0.18), 0 2px 8px rgba(0, 0, 0, 0.5);
+      animation: markerPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes markerPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+
     /* ===== トップバー ===== */
     .topbar {
       height: var(--topbar-h);
@@ -228,6 +243,30 @@
     .panel { visibility: hidden; }
     .panel.open { visibility: visible; }
 
+    /* パネルを閉じたときだけ表示される再表示タブ（右端に縦に配置） */
+    .panel-reopen {
+      position: fixed;
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      writing-mode: vertical-rl;
+      padding: 0.9rem 0.55rem;
+      border: 1px solid var(--vermilion-on-paper);
+      border-right: none;
+      border-radius: 10px 0 0 10px;
+      background: var(--paper);
+      color: var(--vermilion-on-paper);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+      z-index: 900;
+      transition: opacity 0.2s ease;
+    }
+    .panel-reopen:hover { background: var(--vermilion-on-paper); color: var(--paper); }
+    .panel-reopen[hidden] { display: none; }
+
     .panel-head {
       padding: 1.3rem 1.5rem 1rem;
       border-bottom: 3px solid var(--ink-on-paper);
@@ -288,6 +327,13 @@
     }
     .sec-head::after { content: ''; flex: 1; height: 1px; background: var(--line-on-paper); }
     .sec-head:first-child { margin-top: 0; }
+
+    /* 根拠・出典の折りたたみ */
+    .evidence-sec summary { list-style: none; cursor: pointer; }
+    .evidence-sec summary::-webkit-details-marker { display: none; }
+    .evidence-sec summary:hover { color: var(--vermilion-on-paper); }
+    .evidence-sec summary::before { content: '＋'; font-size: 0.7rem; color: var(--vermilion-on-paper); }
+    .evidence-sec[open] summary::before { content: '－'; }
 
     /* 標準レポートカード */
     .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-bottom: 0.7rem; }
@@ -381,6 +427,22 @@
     .msg.ai .bubble p { margin: 0 0 0.4rem; }
     .msg.ai .bubble p:last-child { margin-bottom: 0; }
     .msg.ai .bubble ul { margin: 0.2rem 0 0.4rem 1rem; }
+
+    /* チャット内の施設名リンク（クリックで経路表示） */
+    .msg.ai .bubble .fac-link {
+      display: inline;
+      margin: 0;
+      padding: 0 2px;
+      border: none;
+      background: transparent;
+      color: var(--vermilion-on-paper);
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 2px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .msg.ai .bubble .fac-link:hover { background: rgba(191, 46, 43, 0.08); }
 
     /* タイピングインジケーター */
     .typing { display: flex; gap: 4px; padding: 0.2rem 0.1rem; }
@@ -688,7 +750,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="mark" aria-hidden="true">◆</span>
-      <h1>SUMOSUMO</h1>
+      <h1>sumosumo</h1>
       <span class="tag">新宿区 / オープンデータ</span>
     </div>
     <form class="search" id="search-form" role="search">
@@ -751,19 +813,24 @@
 
       <div class="report-grid" id="report"></div>
 
-      <div class="sec-head">根拠・出典</div>
-      <div class="evidence">
-        <ul id="evidence-list"></ul>
-      </div>
+      <details class="evidence-sec">
+        <summary class="sec-head">根拠・出典</summary>
+        <div class="evidence">
+          <ul id="evidence-list"></ul>
+        </div>
+      </details>
     </div>
   </aside>
+
+    <!-- パネルを閉じた後に表示される再表示タブ -->
+    <button type="button" class="panel-reopen" id="panel-reopen" aria-label="物件カルテを開く" hidden>物件カルテ</button>
 
     <p class="hint" id="hint" aria-hidden="true">地図をクリックで物件を選択。施設アイコンをクリックすると最短経路が表示されます</p>
     <div class="status" id="status" role="status" aria-live="polite"></div>
     <div class="onboard" id="onboard" role="dialog" aria-modal="true" aria-label="使い方" hidden>
       <div class="onboard-card">
         <p class="kicker">ようこそ</p>
-        <h2>SUMOSUMO の使い方</h2>
+        <h2>sumosumo の使い方</h2>
         <ol>
           <li>地図の任意の地点をクリックして物件を選ぶ</li>
           <li>AIがその物件の暮らしをレビューします</li>

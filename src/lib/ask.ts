@@ -3,14 +3,32 @@ import { haversineM } from './distance';
 
 export interface AnswerFacts {
   location: { lat: number; lon: number; displayName: string };
-  facilities: Record<Exclude<Category, 'garbage'>, Facility[]>;
+  facilities: Record<Category, Facility[]>;
   rules: Rule[];
   risk?: { town: string; collapseRank: number; fireRank: number; totalRank: number } | null;
   crime?: { town: string; totalCrimes: number; year: number } | null;
+  flood?: { riverMax: number; stormMax: number } | null;
 }
 
-const LIMIT = 5;
+// 同座標の公共施設（図書館・区民ホール等）が並ぶため8件取得する
+const LIMIT = 8;
 const RADIUS_M = 3000;
+
+// 徒歩時間（分）で「意味がある距離」を定義する。距離 = 徒歩分数 × 80m/分
+const WALK_MIN_M: Record<Category, number> = {
+  disaster: 15, // 避難所は災害時に徒歩で到達できる距離
+  medical: 15,
+  shopping: 15,
+  transport: 20, // 駅は通勤圏として少し広め
+  public: 10,
+  education: 10,
+};
+const WALK_SPEED_M_PER_MIN = 80;
+
+// カテゴリごとの徒歩圏距離上限（m）
+function maxDistM(category: Category): number {
+  return WALK_MIN_M[category] * WALK_SPEED_M_PER_MIN;
+}
 
 function bbox(lat: number, lon: number, radiusM = RADIUS_M) {
   const dLat = radiusM / 111320;
@@ -20,7 +38,7 @@ function bbox(lat: number, lon: number, radiusM = RADIUS_M) {
 
 export async function queryFacilities(
   db: D1Database,
-  category: Exclude<Category, 'garbage'>,
+  category: Category,
   lat: number,
   lon: number,
   limit = LIMIT,
@@ -28,7 +46,7 @@ export async function queryFacilities(
   const b = bbox(lat, lon);
   const res = await db
     .prepare(
-      `SELECT id, category, name, lat, lon, address, source, updated_at AS updatedAt
+      `SELECT id, category, name, lat, lon, address, department, source, updated_at AS updatedAt
        FROM facilities
        WHERE category = ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?`,
     )
@@ -36,6 +54,7 @@ export async function queryFacilities(
     .all<Facility>();
   return (res.results ?? [])
     .map((f) => ({ ...f, distanceM: haversineM(lat, lon, f.lat, f.lon) }))
+    .filter((f) => f.distanceM <= maxDistM(category))
     .sort((a, b) => {
       // 交通カテゴリは「駅」をバス停より優先
       if (category === 'transport') {
@@ -62,19 +81,26 @@ export async function queryRules(db: D1Database): Promise<Rule[]> {
   return res.results ?? [];
 }
 
-export async function gatherFacts(db: D1Database, lat: number, lon: number): Promise<AnswerFacts> {
-  const categories: Array<Exclude<Category, 'garbage'>> = [
+export async function gatherFacts(
+  db: D1Database,
+  lat: number,
+  lon: number,
+  flood?: AnswerFacts['flood'],
+): Promise<AnswerFacts> {
+  const categories: Category[] = [
     'shopping',
     'medical',
     'transport',
     'disaster',
+    'public',
+    'education',
   ];
   const facilities = {} as AnswerFacts['facilities'];
   for (const c of categories) facilities[c] = await queryFacilities(db, c, lat, lon);
   const rules = await queryRules(db);
   const risk = await queryRiskByLocation(db, lat, lon);
   const crime = await queryCrimeByLocation(db, lat, lon);
-  return { location: { lat, lon, displayName: '' }, facilities, rules, risk, crime };
+  return { location: { lat, lon, displayName: '' }, facilities, rules, risk, crime, flood };
 }
 
 // 最寄り町丁目の地震危険度を返す

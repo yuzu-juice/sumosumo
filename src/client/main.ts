@@ -27,7 +27,7 @@ interface Rule {
 interface AskResponse {
   answer: string;
   location: { lat: number; lon: number; displayName: string };
-  facilities: Record<'shopping' | 'medical' | 'transport' | 'disaster', Facility[]>;
+  facilities: Record<Category, Facility[]>;
   rules: Rule[];
   risk?: { town: string; collapseRank: number; fireRank: number; totalRank: number } | null;
   crime?: { town: string; totalCrimes: number; year: number } | null;
@@ -39,22 +39,28 @@ const CAT_COLORS: Record<Category, string> = {
   medical: '#26547c',
   transport: '#2e6b4f',
   disaster: '#c53a1f',
+  public: '#6b5b95',
+  education: '#3a7d44',
 };
 
-const CAT_ORDER: Array<Exclude<Category, 'garbage'>> = ['transport', 'shopping', 'medical', 'disaster'];
+const CAT_ORDER: Category[] = ['transport', 'shopping', 'medical', 'public', 'education', 'disaster'];
 
-const MARKER_COLORS: Record<Exclude<Category, 'garbage'>, string> = {
+const MARKER_COLORS: Record<Category, string> = {
   shopping: '#a8620c',
   medical: '#26547c',
   transport: '#2e6b4f',
   disaster: '#c53a1f',
+  public: '#6b5b95',
+  education: '#3a7d44',
 };
 
-const MARKER_LABELS: Record<Exclude<Category, 'garbage'>, string> = {
+const MARKER_LABELS: Record<Category, string> = {
   transport: '駅',
   shopping: '買',
   medical: '医',
   disaster: '避',
+  public: '公',
+  education: '学',
 };
 
 declare const L: any;
@@ -76,6 +82,7 @@ const chatSuggest = document.getElementById('chat-suggest') as HTMLDivElement;
 const chatEl = document.getElementById('chat') as HTMLDivElement;
 const evidenceList = document.getElementById('evidence-list') as HTMLUListElement;
 const panelClose = document.getElementById('panel-close') as HTMLButtonElement;
+const panelReopen = document.getElementById('panel-reopen') as HTMLButtonElement;
 
 let map: any;
 let markerLayer: any;
@@ -133,6 +140,16 @@ function focusFacilityRoute(name: string, lat: number, lon: number) {
   }
   // 既存の経路を消して、この施設への経路だけを強調
   routeLayer.clearLayers();
+  // 施設アイコンの強調を更新（前回の選択を解除して今回の施設を強調）
+  for (const fm of facilityMarkers) {
+    fm.marker.getElement()?.querySelector('.poi-marker')?.classList.remove('hl');
+  }
+  const target = facilityMarkers.find((x) => x.name === name && Math.abs(x.lat - lat) < 1e-6 && Math.abs(x.lon - lon) < 1e-6)
+    ?? facilityMarkers.find((x) => x.name === name);
+  if (target) {
+    target.marker.getElement()?.querySelector('.poi-marker')?.classList.add('hl');
+    target.marker.openTooltip();
+  }
   const slope = r.elevGainM > 0 ? ` 上り${Math.round(r.elevGainM)}m / 下り${Math.round(r.elevLossM)}m` : '';
   L.polyline(r.path, { className: 'route-line', color: 'var(--vermilion)', weight: 4, opacity: 0.95 })
     .addTo(routeLayer)
@@ -152,6 +169,7 @@ function openPanel(name: string, lat: number, lon: number) {
   panelCoords.textContent = `緯度 ${lat.toFixed(6)} / 経度 ${lon.toFixed(6)}`;
   panel.classList.add('open');
   panel.removeAttribute('inert');
+  panelReopen.hidden = true; // 開いたらタブを隠す
   appEl.classList.add('panel-open'); // パネル分だけマップを詰める
   setTimeout(() => map.invalidateSize(), 350); // パネル展開後に地図リサイズ
 }
@@ -159,7 +177,18 @@ function openPanel(name: string, lat: number, lon: number) {
 function closePanel() {
   panel.classList.remove('open');
   panel.setAttribute('inert', '');
+  if (current) panelReopen.hidden = false; // 閉じたらタブを表示
   appEl.classList.remove('panel-open'); // パネルを閉じるとマップが広がる
+  setTimeout(() => map.invalidateSize(), 350);
+}
+
+// 選択中の物件のパネルを再表示する（タブ・ピンクリックで戻せる）
+function openPanelForCurrent() {
+  if (!current) return;
+  panel.classList.add('open');
+  panel.removeAttribute('inert');
+  panelReopen.hidden = true;
+  appEl.classList.add('panel-open');
   setTimeout(() => map.invalidateSize(), 350);
 }
 
@@ -280,7 +309,7 @@ async function selectProperty(name: string, lat: number, lon: number) {
   markerLayer.clearLayers();
   routeLayer.clearLayers();
   floodLayer.clearLayers();
-  L.marker([lat, lon], {
+  const selMarker = L.marker([lat, lon], {
     icon: L.divIcon({
       className: '',
       html: '<div class="poi-marker sel">◆</div>',
@@ -288,6 +317,10 @@ async function selectProperty(name: string, lat: number, lon: number) {
       iconAnchor: [13, 13],
     }),
   }).addTo(markerLayer).bindPopup('<b>選択した物件</b><br>' + escapeHtml(name));
+  // 選択ピンをクリックするとパネルを再表示できる
+  selMarker.on('click', () => {
+    if (current) openPanelForCurrent();
+  });
   map.setView([lat, lon], Math.max(map.getZoom(), 15));
 
   reportEl.innerHTML = '<p style="color:var(--ink-dim);font-size:0.85rem">暮らしの事実を調べています…</p>';
@@ -317,6 +350,7 @@ async function selectProperty(name: string, lat: number, lon: number) {
     renderReport(data);
     renderMap(data);
     renderEvidence(data);
+    void attachSlopeToCards(lat, lon, data);
   } catch (e) {
     reportEl.innerHTML = '';
     setStatus(`データ取得に失敗: ${(e as Error).message}`, true);
@@ -400,11 +434,45 @@ function appendMsg(role: 'user' | 'ai', text: string) {
   avatar.textContent = role === 'user' ? '私' : 'AI';
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+  bubble.innerHTML = role === 'ai' ? linkifyFacilities(text) : escapeHtml(text).replace(/\n/g, '<br>');
+  // チャット内の施設名クリック → 経路表示
+  if (role === 'ai') {
+    bubble.querySelectorAll<HTMLButtonElement>('button.fac-link').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.name || '';
+        const lat = Number(btn.dataset.lat);
+        const lon = Number(btn.dataset.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) focusFacilityRoute(name, lat, lon);
+      });
+    });
+  }
   msg.appendChild(avatar);
   msg.appendChild(bubble);
   chatLog.appendChild(msg);
   chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// AI回答テキスト内の施設名をクリック可能なリンクに変換する
+function linkifyFacilities(text: string): string {
+  let html = escapeHtml(text).replace(/\n/g, '<br>');
+  // 置換後のボタンHTMLが再度マッチしないよう、施設名→プレースホルダで退避してから復元する
+  const saved: Array<{ token: string; html: string }> = [];
+  // 名前が長い施設から順に置換（短い名前が誤マッチしないよう）
+  const sorted = [...facilityMarkers].sort((a, b) => b.name.length - a.name.length);
+  for (const fm of sorted) {
+    if (!fm.name) continue;
+    const nameEsc = escapeHtml(fm.name);
+    if (html.includes(nameEsc)) {
+      const token = `\u0000FAC${saved.length}\u0000`;
+      saved.push({
+        token,
+        html: `<button type="button" class="fac-link" data-name="${escapeHtml(fm.name)}" data-lat="${fm.lat}" data-lon="${fm.lon}">${nameEsc}</button>`,
+      });
+      html = html.split(nameEsc).join(token);
+    }
+  }
+  for (const s of saved) html = html.split(s.token).join(s.html);
+  return html;
 }
 
 // タイピングインジケーターを表示
@@ -446,16 +514,12 @@ async function ask(body: {
 
 function renderReport(data: AskResponse) {
   reportEl.innerHTML = '';
-  const rulesByCat = new Map<string, Rule[]>();
-  for (const r of data.rules) {
-    if (!rulesByCat.has(r.category)) rulesByCat.set(r.category, []);
-    rulesByCat.get(r.category)!.push(r);
-  }
-
   const cards: Array<{ key: string; title: string; color: string }> = [
     { key: 'transport', title: '最寄り駅', color: CAT_COLORS.transport },
     { key: 'shopping', title: '買い物', color: CAT_COLORS.shopping },
     { key: 'medical', title: '医療', color: CAT_COLORS.medical },
+    { key: 'public', title: '公共施設', color: CAT_COLORS.public },
+    { key: 'education', title: '学校', color: CAT_COLORS.education },
     { key: 'disaster', title: '災害・避難', color: CAT_COLORS.disaster },
   ];
 
@@ -466,23 +530,13 @@ function renderReport(data: AskResponse) {
     let inner = `<div class="r-cat">${escapeHtml(card.title)}</div>`;
 
     {
-      const key = card.key as Exclude<Category, 'garbage'>;
+      const key = card.key as Category;
       const facs = data.facilities[key] || [];
       inner += facs.length
-        ? facs.slice(0, 3).map((f) =>
+        ? facs.map((f) =>
             `<button type="button" class="r-fac" data-name="${escapeHtml(f.name)}" data-cat="${key}" data-lat="${f.lat}" data-lon="${f.lon}">${escapeHtml(f.name)} <span class="r-meta">${fmtDist(f.distanceM)}</span></button>`,
-          ).join('') +
-          `<span class="r-src">出典: ${escapeHtml(facs[0].source)}（${escapeHtml(facs[0].updatedAt)}）</span>`
+          ).join('')
         : '<div class="r-name">周辺に見つかりませんでした</div>';
-      if (card.key === 'disaster' || card.key === 'medical') {
-        const rules = rulesByCat.get(card.key) || [];
-        if (rules.length) {
-          inner += rules.slice(0, 1).map((r) =>
-            `<div class="r-note">${escapeHtml(r.title)} — ${escapeHtml(r.body)}</div>` +
-            `<span class="r-src">出典: <a href="${escapeHtml(r.sourceUrl)}" target="_blank" rel="noopener">${escapeHtml(r.source)}</a>（${escapeHtml(r.updatedAt)}）</span>`,
-          ).join('');
-        }
-      }
       if (card.key === 'disaster') {
         inner += `<button type="button" class="r-flood">浸水想定区域を地図に表示</button>`;
       }
@@ -602,7 +656,7 @@ function renderMap(data: AskResponse) {
   facilityMarkers = [];
   const c = data.location;
 
-  // 選択した物件地点
+  // 選択した物件地点（クリックでパネルを再表示）
   L.marker([c.lat, c.lon], {
     icon: L.divIcon({
       className: '',
@@ -610,7 +664,8 @@ function renderMap(data: AskResponse) {
       iconSize: [26, 26],
       iconAnchor: [13, 13],
     }),
-  }).addTo(markerLayer).bindPopup('<b>選択した物件</b><br>' + escapeHtml(c.displayName));
+  }).addTo(markerLayer).bindPopup('<b>選択した物件</b><br>' + escapeHtml(c.displayName))
+    .on('click', () => { if (current) openPanelForCurrent(); });
 
   // アクティブレイヤーに応じてマーカーをフィルタ
   const showAll = activeLayer === 'all';
@@ -645,48 +700,23 @@ function renderMap(data: AskResponse) {
   if (c.lat && c.lon) map.setView([c.lat, c.lon], Math.max(map.getZoom(), 15));
 }
 
-async function drawRoutes(data: AskResponse) {
-  routeLayer.clearLayers();
-  const c = data.location;
-  if (!router || !current) return;
-
-  const showAll = activeLayer === 'all';
-  const targets: Array<{ lat: number; lon: number; name: string; cat: string }> = [];
-  for (const key of CAT_ORDER) {
-    if (!showAll && key !== activeLayer) continue;
+// 買い物・交通カードの各施設に、そこまでの経路の坂道情報を付与する
+async function attachSlopeToCards(lat: number, lon: number, data: AskResponse) {
+  if (!router) return; // 道路グラフ未ロードならスキップ（後でfocusFacilityRouteで表示）
+  // ルーターがまだ無ければ待つ（ロード完了後に再実行）
+  for (const key of ['shopping', 'transport'] as const) {
     for (const f of data.facilities[key] || []) {
-      targets.push({ lat: f.lat, lon: f.lon, name: f.name, cat: key });
-    }
-  }
-  // 最寄り上位3件に経路を描画
-  targets.sort((a, b) => {
-    const da = haversine(c.lat, c.lon, a.lat, a.lon);
-    const db = haversine(c.lat, c.lon, b.lat, b.lon);
-    return da - db;
-  });
-  for (const t of targets.slice(0, 3)) {
-    const r = router.route(c.lat, c.lon, t.lat, t.lon);
-    if (!r) continue;
-    const slope = r.elevGainM > 0
-      ? ` 上り${Math.round(r.elevGainM)}m / 下り${Math.round(r.elevLossM)}m`
-      : '';
-    L.polyline(r.path, { className: 'route-line', color: 'var(--vermilion)', weight: 3, opacity: 0.85 })
-      .addTo(routeLayer)
-      .bindTooltip(`${t.cat} ${escapeHtml(t.name)} 経路 ${fmtDist(r.distanceM)}${slope}`, { sticky: true });
-    L.circleMarker([t.lat, t.lon], { className: 'route-end', radius: 4, color: 'var(--vermilion)' }).addTo(routeLayer);
-    // 施設カードの坂道情報に反映
-    const fm = facilityMarkers.find((x) => x.name === t.name && x.cat === t.cat);
-    if (fm) {
-      fm.elevGainM = r.elevGainM;
-      fm.elevLossM = r.elevLossM;
-      if (r.elevGainM > 5) {
-        const btn = reportEl.querySelector<HTMLButtonElement>(`.r-fac[data-name="${CSS.escape(t.name)}"]`);
-        if (btn && !btn.querySelector('.r-slope')) {
-          const span = document.createElement('span');
-          span.className = 'r-slope';
-          span.textContent = ` 坂道 上り${Math.round(r.elevGainM)}m`;
-          btn.appendChild(span);
-        }
+      const r = router.route(lat, lon, f.lat, f.lon);
+      if (!r) continue;
+      if (r.elevGainM <= 5) continue; // 大きな坂道のみ表示
+      const btn = reportEl.querySelector<HTMLButtonElement>(
+        `.r-fac[data-name="${CSS.escape(f.name)}"]`,
+      );
+      if (btn && !btn.querySelector('.r-slope')) {
+        const span = document.createElement('span');
+        span.className = 'r-slope';
+        span.textContent = ` 坂道 上り${Math.round(r.elevGainM)}m / 下り${Math.round(r.elevLossM)}m`;
+        btn.appendChild(span);
       }
     }
   }
@@ -776,11 +806,12 @@ async function askReview(lat: number, lon: number, q: string) {
 }
 
 panelClose.addEventListener('click', closePanel);
+panelReopen.addEventListener('click', openPanelForCurrent);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePanel();
 });
 
-let floodCells: Array<{ lat: number; lon: number; depth: number }> | null = null;
+let floodCells: Array<{ lat: number; lon: number; depth: number; type?: string }> | null = null;
 let floodShown = false;
 
 // 洪水レイヤーを表示/非表示トグル（災害カードから呼ぶ）
@@ -802,7 +833,8 @@ async function toggleFlood() {
   if (floodCells && floodCells.length) {
     drawFlood(floodCells);
     floodShown = true;
-    setStatus('浸水想定区域を表示（外水・内水氾濫含む。出典: 東京都建設局 神田川流域浸水予想区域図）');
+    const hasStorm = floodCells.some((c) => c.type === 'storm');
+    setStatus(`浸水想定区域を表示（青=河川浸水${hasStorm ? '・オレンジ=高潮' : ''}。出典: 東京都建設局 神田川流域浸水予想区域図${hasStorm ? '・東京都港湾局 高潮浸水想定区域図' : ''}）`);
   } else {
     floodLayer.clearLayers();
     setStatus('浸水想定区域データがありません');
@@ -814,37 +846,52 @@ async function toggleFlood() {
 }
 
 // マーチングスクエアで浸水深の等高線ポリゴンをなめらかに描画する
-function drawFlood(cells: Array<{ lat: number; lon: number; depth: number }>) {
+function drawFlood(cells: Array<{ lat: number; lon: number; depth: number; type?: string }>) {
   floodLayer.clearLayers();
-  // グリッドへ展開
-  const grid = new Map<string, number>();
-  for (const c of cells) grid.set(`${c.lat},${c.lon}`, c.depth);
-  const lats = [...new Set(cells.map((c) => c.lat))].sort((a, b) => a - b);
-  const lons = [...new Set(cells.map((c) => c.lon))].sort((a, b) => a - b);
-  const dLat = lats[1] - lats[0] || 0.001;
-  const dLon = lons[1] - lons[0] || 0.001;
+  // typeごとに色を分ける（河川=青系、高潮=オレンジ/赤系）
+  const typeColors: Record<string, string> = {
+    river: '#2a6db5',
+    storm: '#c2402a',
+  };
+  const floodTypes: string[] = [];
+  for (const c of cells) {
+    const t = c.type || 'river';
+    if (!floodTypes.includes(t)) floodTypes.push(t);
+  }
 
-  // 閾値クラス: [下限, 色]
-  const classes: Array<[number, string]> = [
-    [0.5, 'rgba(224,182,77,0.5)'],
-    [1.0, 'rgba(255,107,61,0.55)'],
-    [2.0, 'rgba(216,74,31,0.6)'],
-    [5.0, 'rgba(169,44,26,0.7)'],
-  ];
+  for (const type of floodTypes) {
+    const typeCells = cells.filter((c) => (c.type || 'river') === type);
+    // グリッドへ展開
+    const grid = new Map<string, number>();
+    for (const c of typeCells) grid.set(`${c.lat},${c.lon}`, c.depth);
+    const lats = [...new Set(typeCells.map((c) => c.lat))].sort((a, b) => a - b);
+    const lons = [...new Set(typeCells.map((c) => c.lon))].sort((a, b) => a - b);
+    const dLat = lats[1] - lats[0] || 0.001;
+    const dLon = lons[1] - lons[0] || 0.001;
 
-  for (const [threshold, color] of classes) {
-    const rings = marchingSquares(grid, lats, lons, dLat, dLon, threshold);
-    for (const ring of rings) {
-      if (ring.length < 3) continue;
-      // 浸水区域はクリック不可（視覚表示のみ）
-      L.polygon(ring, {
-        color: 'rgba(169,44,26,0.5)',
-        weight: 1,
-        fillColor: color,
-        fillOpacity: 1,
-        className: 'flood-zone',
-        interactive: false,
-      }).addTo(floodLayer);
+    const base = typeColors[type] || '#2a6db5';
+    // 閾値クラス: [下限, 色]
+    const classes: Array<[number, string]> = [
+      [0.5, `${base}88`],
+      [1.0, `${base}AA`],
+      [2.0, `${base}CC`],
+      [5.0, `${base}EE`],
+    ];
+
+    for (const [threshold, color] of classes) {
+      const rings = marchingSquares(grid, lats, lons, dLat, dLon, threshold);
+      for (const ring of rings) {
+        if (ring.length < 3) continue;
+        // 浸水区域はクリック不可（視覚表示のみ）
+        L.polygon(ring, {
+          color: `${base}55`,
+          weight: 1,
+          fillColor: color,
+          fillOpacity: 1,
+          className: 'flood-zone',
+          interactive: false,
+        }).addTo(floodLayer);
+      }
     }
   }
 }
@@ -966,11 +1013,12 @@ async function loadRouter() {
     if (!res.ok) throw new Error('道路データ取得失敗');
     const graph = (await res.json()) as RoadGraph;
     router = new Router(graph);
-    // ルーター準備後に、選択中の物件があれば経路を再描画
+    // ルーター準備後に、選択中の物件があれば坂道情報を再反映
     if (current) {
       try {
         const data = await ask({ lat: current.lat, lon: current.lon });
         renderMap(data);
+        void attachSlopeToCards(current.lat, current.lon, data);
       } catch {
         // 無視
       }
