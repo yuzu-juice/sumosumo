@@ -124,8 +124,11 @@ MCPクライアント（Claude Desktop等）から接続する場合:
 
 利用可能なツール:
 - `geocode` — 住所→緯度経度
-- `search_facilities` — 周辺施設を距離順に検索
+- `search_facilities` — 周辺施設を距離順に検索（7カテゴリ対応）
 - `get_rules` — 新宿区の生活ルール（ごみ・災害・医療）
+- `get_risk` — 最寄り町丁目の地震地域危険度ランク
+- `get_crime` — 最寄り町丁目の犯罪認知件数
+- `get_flood` — 周辺の浸水想定リスク（河川・高潮）
 
 ## テスト
 
