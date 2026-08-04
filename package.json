@@ -1,0 +1,38 @@
+{
+  "name": "odh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc -p tsconfig.client.json --noEmit && esbuild src/client/main.ts --bundle --minify --format=iife --outfile=public/app.js",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "wrangler d1 migrations apply odh-db",
+    "db:seed": "wrangler d1 execute odh-db --file=./migrations/0002_seed_rules.sql",
+    "collect:osm": "node scripts/collect-osm.mjs",
+    "collect:roads": "node scripts/collect-roads.mjs",
+    "collect:flood": "node scripts/collect-flood.mjs",
+    "collect:risk": "node scripts/collect-risk.mjs",
+    "collect:crime": "node scripts/collect-crime.mjs",
+    "collect:tiles": "node scripts/collect-tiles.mjs",
+    "collect:boundary": "node scripts/collect-boundary.mjs",
+    "collect:elev": "node scripts/collect-elev.mjs",
+    "add:elev": "node scripts/add-elev.mjs",
+    "collect:official": "node scripts/collect-official.mjs",
+    "build:geodict": "node scripts/build-geodict.mjs",
+    "collect:disaster": "wrangler d1 execute odh-db --remote --command \"DELETE FROM facilities WHERE category='disaster';\" && curl -s -X POST https://odh.tokyo-odh-165-233.workers.dev/api/collect -H \"x-collect-token: $COLLECT_TOKEN\"",
+    "collect:local": "wrangler dev --local --test-scheduled"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "wrangler": "^4.118.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0"
+  }
+}

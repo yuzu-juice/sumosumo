@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "odh",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "odh-db",
+      "database_id": "9217c62f-7620-4d44-a833-69036d040ef4"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "RAW_BUCKET",
+      "bucket_name": "odh-raw"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  }
+}
