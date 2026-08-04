@@ -23,6 +23,7 @@ const facts: AnswerFacts = {
     disaster: [],
     public: [],
     education: [],
+    childcare: [],
   },
   rules: [
     {
@@ -82,6 +83,15 @@ describe('detectTopic', () => {
   });
   it('駅の質問をtransportと判定', () => {
     expect(detectTopic('最寄り駅はどこ？')).toBe('transport');
+  });
+  it('図書館の質問をpublicと判定', () => {
+    expect(detectTopic('図書館は近くにある？')).toBe('public');
+  });
+  it('保育園の質問をchildcareと判定', () => {
+    expect(detectTopic('この辺りの保育園は？')).toBe('childcare');
+  });
+  it('学校の質問をeducationと判定', () => {
+    expect(detectTopic('近くの小学校は？')).toBe('education');
   });
   it('無関係な質問はnull', () => {
     expect(detectTopic('今日の天気は？')).toBeNull();

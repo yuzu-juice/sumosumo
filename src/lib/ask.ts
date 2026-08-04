@@ -22,6 +22,7 @@ const WALK_MIN_M: Record<Category, number> = {
   transport: 20, // 駅は通勤圏として少し広め
   public: 10,
   education: 10,
+  childcare: 10,
 };
 const WALK_SPEED_M_PER_MIN = 80;
 
@@ -94,6 +95,7 @@ export async function gatherFacts(
     'disaster',
     'public',
     'education',
+    'childcare',
   ];
   const facilities = {} as AnswerFacts['facilities'];
   for (const c of categories) facilities[c] = await queryFacilities(db, c, lat, lon);

@@ -1,4 +1,4 @@
-export type Category = 'shopping' | 'medical' | 'transport' | 'disaster' | 'public' | 'education';
+export type Category = 'shopping' | 'medical' | 'transport' | 'disaster' | 'public' | 'education' | 'childcare';
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   shopping: '買い物',
@@ -7,6 +7,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   disaster: '災害',
   public: '公共施設',
   education: '学校',
+  childcare: '子育て',
 };
 
 export const WARD = '新宿区';

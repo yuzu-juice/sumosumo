@@ -81,6 +81,7 @@ function parseDbf(path) {
 }
 
 // 高潮データの図郭番号（新宿区を含む）
+const STORM_ZIP_URL = 'https://data.storage.data.metro.tokyo.lg.jp/kouwan/shape(depth).zip';
 const STORM_DBF_DIR = '/tmp/opencode/takashio/shape(depth)';
 const STORM_SHEETS = ['0307', '0407', '0408', '0409'];
 // 境界判定用の新宿区外環（平面直角座標系へ変換済み）
@@ -164,7 +165,25 @@ function fetchStormCells() {
   });
 }
 
+async function ensureStormDbf() {
+  // 既に解凍済みならスキップ
+  const { existsSync, mkdirSync } = await import('node:fs');
+  if (STORM_SHEETS.every((s) => existsSync(`${STORM_DBF_DIR}/${s}.dbf`))) return;
+  console.log('高潮SHPをダウンロード中…');
+  const res = await fetch(STORM_ZIP_URL, { headers: { 'User-Agent': 'curl/8.5.0' } });
+  if (!res.ok) throw new Error(`高潮ZIP取得失敗 ${res.status}`);
+  const zipPath = '/tmp/opencode/takashio-shape.zip';
+  writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
+  mkdirSync('/tmp/opencode/takashio', { recursive: true });
+  execFileSync('unzip', ['-o', zipPath, '-d', '/tmp/opencode/takashio'], { stdio: 'inherit' });
+  if (!existsSync(`${STORM_DBF_DIR}/0307.dbf`)) {
+    // ZIP内のディレクトリ名が違う場合を探す
+    throw new Error('高潮ZIPの展開に失敗: 図郭0307.dbfが見つかりません');
+  }
+}
+
 async function main() {
+  await ensureStormDbf();
   const river = await fetchRiverCells();
   const storm = fetchStormCells();
   const data = [...river, ...storm];

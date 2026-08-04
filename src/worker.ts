@@ -218,6 +218,7 @@ async function handleAsk(request: Request, env: Env, ctx: ExecutionContext): Pro
       rules: facts.rules,
       risk: facts.risk,
       crime: facts.crime,
+      flood: facts.flood,
       question,
     });
   } catch (e) {
@@ -234,6 +235,7 @@ function defaultQuestionFor(category: Category | undefined): string {
     disaster: 'この住所の災害リスク（洪水・避難所）はどうですか？',
     public: 'この住所の周辺の図書館・区役所などの公共施設はどうですか？',
     education: 'この住所の周辺の小学校・中学校などの学校はどうですか？',
+    childcare: 'この住所の周辺の保育園・幼稚園などの子育て環境はどうですか？',
   };
   return category ? qs[category] : qs.transport;
 }
@@ -260,6 +262,7 @@ async function handleReview(request: Request, env: Env, ctx: ExecutionContext): 
       rules: facts.rules,
       risk: facts.risk,
       crime: facts.crime,
+      flood: facts.flood,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

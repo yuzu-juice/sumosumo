@@ -6,7 +6,7 @@ import { formatDistance } from './lib/distance';
 import { CATEGORY_LABELS, Category } from './types';
 import type { Env } from './worker';
 
-const CATEGORIES = ['shopping', 'medical', 'transport', 'disaster', 'public', 'education'] as const;
+const CATEGORIES = ['shopping', 'medical', 'transport', 'disaster', 'public', 'education', 'childcare'] as const;
 
 export function buildMcpServer(env: Env): McpServer {
   const server = new McpServer({ name: 'sumosumo', version: '1.0.0' });

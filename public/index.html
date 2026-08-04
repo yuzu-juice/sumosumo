@@ -465,12 +465,17 @@
       color: var(--ink-dim-on-paper);
       background: var(--paper-2);
       border: 1px solid var(--line-on-paper);
-      border-radius: 999px;
-      padding: 0.3rem 0.75rem;
+      border-radius: 8px;
+      padding: 0.35rem 0.6rem;
       cursor: pointer;
       transition: all 0.15s;
+      display: flex; flex-direction: column; align-items: flex-start;
+      line-height: 1.25;
     }
-    .chat-suggest button:hover { border-color: var(--vermilion-on-paper); color: var(--vermilion-on-paper); }
+    .chat-suggest button .q-label { font-weight: 700; color: var(--ink-on-paper); font-size: 0.74rem; }
+    .chat-suggest button .q-desc { font-size: 0.62rem; color: var(--ink-dim-on-paper); }
+    .chat-suggest button:hover { border-color: var(--vermilion-on-paper); background: rgba(191,46,43,0.04); }
+    .chat-suggest button:hover .q-label { color: var(--vermilion-on-paper); }
     .chat-suggest button:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .chat-input-row {
@@ -519,6 +524,14 @@
     .rep::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--rc, var(--ink-dim-on-paper)); }
     .rep .r-cat { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.16em; color: var(--rc, var(--ink-dim-on-paper)); text-transform: uppercase; font-weight: 600; }
     .rep .r-name { font-weight: 700; font-size: 0.88rem; margin-top: 0.45rem; line-height: 1.45; color: var(--ink-on-paper); }
+    .rep .r-flood-risk {
+      margin-top: 0.5rem; padding: 0.35rem 0.5rem;
+      background: rgba(191, 46, 43, 0.06);
+      border-left: 3px solid var(--c53a1f, #c53a1f);
+      border-radius: 4px;
+      font-size: 0.72rem; font-weight: 700; color: var(--c53a1f, #c53a1f);
+      line-height: 1.4;
+    }
     .rep .r-meta { font-size: 0.74rem; color: var(--ink-dim-on-paper); font-family: var(--font-mono); }
     .rep .r-note { font-size: 0.72rem; color: var(--ink-dim-on-paper); margin-top: 0.3rem; line-height: 1.6; }
     .rep .r-src { display: block; margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px dashed var(--line-on-paper); font-family: var(--font-mono); font-size: 0.58rem; color: var(--ink-dim-on-paper); line-height: 1.6; }
@@ -797,11 +810,11 @@
 
         <!-- 提案チップ（会話の起点） -->
         <div class="chat-suggest" id="chat-suggest">
-          <button type="button" data-q="地震危険度ランクは具体的に何を意味する？">地震危険度</button>
-          <button type="button" data-q="この辺りの治安はどう？犯罪件数は？">治安</button>
-          <button type="button" data-q="浸水のリスクは？避難所は近い？">洪水・避難</button>
-          <button type="button" data-q="家族で住むにはどう？子育て環境は？">子育て</button>
-          <button type="button" data-q="夜遅く帰る生活でも大丈夫？">夜の生活</button>
+          <button type="button" data-q="この辺りの地震の危険度ランクは？" title="地震危険度ランクを聞く"><span class="q-label">地震の危険度</span><span class="q-desc">ランクはどれくらい？</span></button>
+          <button type="button" data-q="この辺りの治安はどう？犯罪件数は？" title="治安を聞く"><span class="q-label">治安</span><span class="q-desc">犯罪件数は多い？</span></button>
+          <button type="button" data-q="浸水のリスクは？避難所は近い？" title="洪水・避難を聞く"><span class="q-label">洪水・避難</span><span class="q-desc">浸水する？避難所は？</span></button>
+          <button type="button" data-q="この辺りの保育園や学校は近い？子育て環境は？" title="子育て環境を聞く"><span class="q-label">子育て環境</span><span class="q-desc">保育園・学校は？</span></button>
+          <button type="button" data-q="夜遅く帰る生活でも大丈夫？" title="夜の生活を聞く"><span class="q-label">夜の生活</span><span class="q-desc">帰り道は安全？</span></button>
         </div>
 
         <!-- 入力欄 -->

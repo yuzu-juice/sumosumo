@@ -42,6 +42,17 @@ const SOURCES = [
     addrKeys: ['教育機関_学校所在地（市区町村）', '教育機関_学校所在地（町字）', '教育機関_学校所在地（番地以下）'],
     match: (name) => true,
   },
+  {
+    category: 'childcare',
+    note: '新宿区 子育て施設一覧',
+    csv: 'https://www.city.shinjuku.lg.jp/content/000399969.csv',
+    encoding: 'utf-16le',
+    nameKey: '名称',
+    latKey: '緯度',
+    lonKey: '経度',
+    addrKeys: ['所在地_連結表記'],
+    match: (name) => true,
+  },
 ];
 
 function csvParse(text) {

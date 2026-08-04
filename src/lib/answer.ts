@@ -58,14 +58,15 @@ ${relevant}
   return runAi(env, prompt);
 }
 
-type Topic = 'crime' | 'disaster' | 'shopping' | 'medical' | 'transport' | 'risk' | 'public' | 'education';
+type Topic = 'crime' | 'disaster' | 'shopping' | 'medical' | 'transport' | 'risk' | 'public' | 'education' | 'childcare';
 
 export function detectTopic(q: string): Topic | null {
   if (/治安|犯罪|安全|怖|事件/.test(q)) return 'crime';
   if (/地震|危険度|倒壊|火災リスク|揺れ/.test(q)) return 'risk';
   if (/洪水|浸水|避難|災害|津波|水害|大雨/.test(q)) return 'disaster';
-  if (/図書館|図書館|公共|区役所|役所|公園|体育館|プール/.test(q)) return 'public';
-  if (/学校|小学校|中学校|高校|学童|保育園|幼稚園|子育て|通学/.test(q)) return 'education';
+  if (/図書館|公共|区役所|役所|公園|体育館|プール/.test(q)) return 'public';
+  if (/保育園|幼稚園|子育て|学童|児童館/.test(q)) return 'childcare';
+  if (/学校|小学校|中学校|高校|通学/.test(q)) return 'education';
   if (/買い物|スーパー|コンビニ|買|店/.test(q)) return 'shopping';
   if (/病院|診療|薬局|医療|医者|夜間|救急/.test(q)) return 'medical';
   if (/駅|交通|通勤|電車|バス|徒歩/.test(q)) return 'transport';
@@ -113,6 +114,9 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
   }
   if (topic === 'education') {
     for (const f of facts.facilities.education || []) lines.push(`学校: ${f.name}（${formatDistance(f.distanceM)}）`);
+  }
+  if (topic === 'childcare') {
+    for (const f of facts.facilities.childcare || []) lines.push(`子育て施設: ${f.name}（${formatDistance(f.distanceM)}）`);
   }
   return lines.join('\n');
 }
@@ -168,8 +172,9 @@ export function buildContext(facts: AnswerFacts): string {
     disaster: '災害',
     public: '公共施設',
     education: '学校',
+    childcare: '子育て',
   } as const;
-  for (const key of ['shopping', 'medical', 'transport', 'disaster', 'public', 'education'] as const) {
+  for (const key of ['shopping', 'medical', 'transport', 'disaster', 'public', 'education', 'childcare'] as const) {
     const facs = facts.facilities[key];
     if (!facs?.length) continue;
     parts.push(`【${labels[key]}】`);

@@ -31,6 +31,7 @@ interface AskResponse {
   rules: Rule[];
   risk?: { town: string; collapseRank: number; fireRank: number; totalRank: number } | null;
   crime?: { town: string; totalCrimes: number; year: number } | null;
+  flood?: { riverMax: number; stormMax: number } | null;
   question: string;
 }
 
@@ -41,9 +42,10 @@ const CAT_COLORS: Record<Category, string> = {
   disaster: '#c53a1f',
   public: '#6b5b95',
   education: '#3a7d44',
+  childcare: '#d4856b',
 };
 
-const CAT_ORDER: Category[] = ['transport', 'shopping', 'medical', 'public', 'education', 'disaster'];
+const CAT_ORDER: Category[] = ['transport', 'shopping', 'medical', 'public', 'education', 'childcare', 'disaster'];
 
 const MARKER_COLORS: Record<Category, string> = {
   shopping: '#a8620c',
@@ -52,6 +54,7 @@ const MARKER_COLORS: Record<Category, string> = {
   disaster: '#c53a1f',
   public: '#6b5b95',
   education: '#3a7d44',
+  childcare: '#d4856b',
 };
 
 const MARKER_LABELS: Record<Category, string> = {
@@ -61,6 +64,7 @@ const MARKER_LABELS: Record<Category, string> = {
   disaster: '避',
   public: '公',
   education: '学',
+  childcare: '子',
 };
 
 declare const L: any;
@@ -316,7 +320,20 @@ async function selectProperty(name: string, lat: number, lon: number) {
       iconSize: [26, 26],
       iconAnchor: [13, 13],
     }),
+    draggable: true, // Google Maps風: ピンをドラッグして位置を微調整できる
   }).addTo(markerLayer).bindPopup('<b>選択した物件</b><br>' + escapeHtml(name));
+  // ドラッグ終了 → 新しい位置で再選択（誤クリックでも調整可能）
+  selMarker.on('dragend', () => {
+    const p = selMarker.getLatLng();
+    if (!isInsideWard(p.lat, p.lng)) {
+      setStatus('選択できるのは新宿区内です', true);
+      // 元の位置に戻す
+      selMarker.setLatLng([lat, lon]);
+      map.setView([lat, lon], map.getZoom());
+      return;
+    }
+    selectProperty('選択した地点（名称なし）', p.lat, p.lng);
+  });
   // 選択ピンをクリックするとパネルを再表示できる
   selMarker.on('click', () => {
     if (current) openPanelForCurrent();
@@ -389,7 +406,8 @@ async function loadReview(lat: number, lon: number) {
       meta.innerHTML = stations
         .map((s) => {
           const min = Math.max(1, Math.round(s.distanceM / 80)); // 徒歩80m/分で概算
-          return `<span class="review-meta-item">駅 ${escapeHtml(s.name)} まで徒歩${min}分（${fmtDist(s.distanceM)}）</span>`;
+          const stationName = /駅$/.test(s.name) ? s.name : `${s.name}駅`;
+          return `<span class="review-meta-item">${escapeHtml(stationName)} まで徒歩${min}分（${fmtDist(s.distanceM)}）</span>`;
         })
         .join('');
     }
@@ -520,6 +538,7 @@ function renderReport(data: AskResponse) {
     { key: 'medical', title: '医療', color: CAT_COLORS.medical },
     { key: 'public', title: '公共施設', color: CAT_COLORS.public },
     { key: 'education', title: '学校', color: CAT_COLORS.education },
+    { key: 'childcare', title: '子育て', color: CAT_COLORS.childcare },
     { key: 'disaster', title: '災害・避難', color: CAT_COLORS.disaster },
   ];
 
@@ -538,6 +557,12 @@ function renderReport(data: AskResponse) {
           ).join('')
         : '<div class="r-name">周辺に見つかりませんでした</div>';
       if (card.key === 'disaster') {
+        // 地点周辺の浸水想定（河川・高潮）を表示
+        if (data.flood && (data.flood.riverMax > 0 || data.flood.stormMax > 0)) {
+          const river = data.flood.riverMax > 0 ? `河川 ${data.flood.riverMax.toFixed(1)}m` : '';
+          const storm = data.flood.stormMax > 0 ? `高潮 ${data.flood.stormMax.toFixed(1)}m` : '';
+          inner += `<div class="r-flood-risk">浸水想定 最大: ${[river, storm].filter(Boolean).join(' / ')}</div>`;
+        }
         inner += `<button type="button" class="r-flood">浸水想定区域を地図に表示</button>`;
       }
     }
@@ -656,16 +681,26 @@ function renderMap(data: AskResponse) {
   facilityMarkers = [];
   const c = data.location;
 
-  // 選択した物件地点（クリックでパネルを再表示）
-  L.marker([c.lat, c.lon], {
+  // 選択した物件地点（クリックでパネル再表示、ドラッグで位置微調整）
+  const selMarker = L.marker([c.lat, c.lon], {
     icon: L.divIcon({
       className: '',
       html: '<div class="poi-marker sel">◆</div>',
       iconSize: [26, 26],
       iconAnchor: [13, 13],
     }),
+    draggable: true,
   }).addTo(markerLayer).bindPopup('<b>選択した物件</b><br>' + escapeHtml(c.displayName))
     .on('click', () => { if (current) openPanelForCurrent(); });
+  selMarker.on('dragend', () => {
+    const p = selMarker.getLatLng();
+    if (!isInsideWard(p.lat, p.lng)) {
+      setStatus('選択できるのは新宿区内です', true);
+      selMarker.setLatLng([c.lat, c.lon]);
+      return;
+    }
+    selectProperty('選択した地点（名称なし）', p.lat, p.lng);
+  });
 
   // アクティブレイヤーに応じてマーカーをフィルタ
   const showAll = activeLayer === 'all';
