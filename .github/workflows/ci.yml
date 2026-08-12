@@ -22,7 +22,7 @@ jobs:
       - name: Verify slides HTML was generated
         run: test -s docs/pitch/slides.html
       - name: Upload slides as artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: slides
           path: docs/pitch/slides.html
