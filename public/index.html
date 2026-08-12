@@ -81,6 +81,26 @@
     .leaflet-bar a { background: #fff; color: var(--ink); border-color: var(--line); }
     .leaflet-bar a:hover { background: var(--night-3); }
 
+    /* ピン位置に戻る現在地ボタン */
+    .leaflet-control-locate {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      background: var(--paper);
+      border: 1px solid var(--line-on-paper);
+      border-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      cursor: pointer;
+      color: var(--ink-on-paper);
+      font-size: 0.85rem;
+      padding: 0;
+      transition: background 0.15s;
+    }
+    .leaflet-control-locate:hover { background: var(--paper-2); color: var(--vermilion-on-paper); }
+    .leaflet-control-locate .locate-ico { font-size: 0.9rem; line-height: 1; }
+
     /* 建物ポリゴン */
     .building {
       fill: #3a4150;
@@ -234,7 +254,6 @@
       background: var(--paper);
       color: var(--ink-on-paper);
       box-shadow: var(--shadow);
-      overflow-y: auto;
       display: flex;
       flex-direction: column;
       border-left: 1px solid var(--line);
@@ -242,7 +261,6 @@
     /* パネル閉時は列幅0・非表示。開時はmain.app.panel-openで列幅が広がりマップが詰まる */
     .panel { visibility: hidden; }
     .panel.open { visibility: visible; }
-
     /* パネルを閉じたときだけ表示される再表示タブ（右端に縦に配置） */
     .panel-reopen {
       position: fixed;
@@ -270,7 +288,7 @@
     .panel-head {
       padding: 1.3rem 1.5rem 1rem;
       border-bottom: 3px solid var(--ink-on-paper);
-      position: sticky; top: 0;
+      flex-shrink: 0;
       background: var(--paper);
       z-index: 2;
     }
@@ -311,7 +329,13 @@
     }
     .panel-head .close:hover { border-color: var(--vermilion-on-paper); color: var(--vermilion-on-paper); }
 
-    .panel-body { padding: 1.15rem 1.5rem 2.5rem; }
+    .panel-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 1.15rem 1.5rem 2.5rem;
+      overscroll-behavior: contain;
+    }
 
     /* セクション見出し */
     .sec-head {
@@ -428,8 +452,8 @@
     .msg.ai .bubble p:last-child { margin-bottom: 0; }
     .msg.ai .bubble ul { margin: 0.2rem 0 0.4rem 1rem; }
 
-    /* チャット内の施設名リンク（クリックで経路表示） */
-    .msg.ai .bubble .fac-link {
+    /* 施設名リンク（クリックで経路表示） */
+    .fac-link {
       display: inline;
       margin: 0;
       padding: 0 2px;
@@ -442,7 +466,7 @@
       font: inherit;
       cursor: pointer;
     }
-    .msg.ai .bubble .fac-link:hover { background: rgba(191, 46, 43, 0.08); }
+    .fac-link:hover { background: rgba(191, 46, 43, 0.08); }
 
     /* タイピングインジケーター */
     .typing { display: flex; gap: 4px; padding: 0.2rem 0.1rem; }
@@ -543,7 +567,7 @@
       background: linear-gradient(135deg, rgba(107,91,149,0.06), transparent 60%), var(--paper-2);
       border: 1px solid var(--line-on-paper);
       border-radius: var(--radius);
-      padding: 0.9rem 1rem;
+      padding: 0.85rem 0.95rem;
       position: relative;
       overflow: hidden;
       margin-bottom: 0.7rem;
@@ -584,7 +608,6 @@
     .rep .r-fac:hover { background: rgba(197, 58, 31, 0.12); color: var(--vermilion-on-paper); }
     .rep .r-fac:focus-visible { outline: 2px solid var(--vermilion-on-paper); outline-offset: 1px; }
     .rep .r-fac .r-meta { font-weight: 400; color: var(--ink-dim-on-paper); font-family: var(--font-mono); font-size: 0.74rem; }
-    .rep .r-fac .r-slope { font-weight: 400; color: var(--vermilion-on-paper); font-family: var(--font-mono); font-size: 0.7rem; }
     .rep .r-flood {
       display: block;
       width: 100%;
@@ -723,6 +746,8 @@
       max-width: 90vw;
     }
     .status.show { display: block; animation: statusIn 0.2s ease; }
+    .status.persistent { border-color: var(--vermilion-on-paper); background: var(--vermilion-on-paper); color: #fff; }
+    .status.persistent.err { border-color: var(--vermilion); background: var(--vermilion); color: #fff; }
     @keyframes statusIn { from { opacity: 0; transform: translate(-50%, -4px); } to { opacity: 1; transform: translate(-50%, 0); } }
     .status.err { border-color: var(--vermilion); color: var(--vermilion); }
 

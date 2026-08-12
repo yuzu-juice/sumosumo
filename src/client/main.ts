@@ -31,7 +31,7 @@ interface AskResponse {
   rules: Rule[];
   risk?: { town: string; collapseRank: number; fireRank: number; totalRank: number } | null;
   crime?: { town: string; totalCrimes: number; year: number } | null;
-  flood?: { riverMax: number; stormMax: number } | null;
+  flood?: { riverMax: number } | null;
   demographics?: {
     town: string;
     totalPop: number;
@@ -47,7 +47,7 @@ interface AskResponse {
   parks?: Array<{ name: string; distanceM: number }> | null;
   emergencyShelters?: Array<{
     name: string; distanceM: number; flood: boolean; landslide: boolean;
-    stormSurge: boolean; earthquake: boolean; fire: boolean; capacity: number | null;
+    earthquake: boolean; fire: boolean; capacity: number | null;
   }> | null;
   schoolZone?: string | null;
   question: string;
@@ -121,6 +121,12 @@ function setStatus(msg: string, isErr = false) {
   window.clearTimeout(statusTimer);
   if (msg) statusTimer = window.setTimeout(() => statusEl.classList.remove('show'), 3500);
 }
+// 経路などの重要な情報は自動で消さず、次のアクションまで永続表示する
+function setStatusPersistent(msg: string, isErr = false) {
+  statusEl.textContent = msg;
+  statusEl.className = 'status show persistent' + (isErr ? ' err' : '');
+  window.clearTimeout(statusTimer);
+}
 
 function escapeHtml(s: unknown): string {
   if (s === null || s === undefined) return '';
@@ -172,10 +178,8 @@ function focusFacilityRoute(name: string, lat: number, lon: number) {
     target.marker.getElement()?.querySelector('.poi-marker')?.classList.add('hl');
     target.marker.openTooltip();
   }
-  const slope = r.elevGainM > 0 ? ` 上り${Math.round(r.elevGainM)}m / 下り${Math.round(r.elevLossM)}m` : '';
   L.polyline(r.path, { className: 'route-line', color: 'var(--vermilion)', weight: 4, opacity: 0.95 })
-    .addTo(routeLayer)
-    .bindTooltip(`${escapeHtml(name)} まで ${fmtDist(r.distanceM)}${slope}`, { sticky: true });
+    .addTo(routeLayer);
   L.circleMarker([lat, lon], { className: 'route-end', radius: 5, color: 'var(--vermilion)' }).addTo(routeLayer);
   // 経路ライン全体と選択ピン・施設の両方が見えるようフィット
   const bounds = L.latLngBounds(
@@ -183,7 +187,7 @@ function focusFacilityRoute(name: string, lat: number, lon: number) {
     [Math.max(current.lat, lat), Math.max(current.lon, lon)],
   );
   map.fitBounds(bounds.pad(0.25), { maxZoom: 18 });
-  setStatus(`最短経路: ${name} まで ${fmtDist(r.distanceM)}${slope}`);
+  setStatusPersistent(`最短経路: ${name} まで ${fmtDist(r.distanceM)}`);
 }
 
 function openPanel(name: string, lat: number, lon: number) {
@@ -250,7 +254,19 @@ function initMap() {
   routeLayer = L.layerGroup().addTo(map);
   floodLayer = L.layerGroup().addTo(map);
   addBoundaryOverlay();
+  addPinLocateControl();
+  // 誤操作防止: ドラッグ（パン）後に発火するclickは無視する
+  let dragStart: { x: number; y: number } | null = null;
+  map.on('mousedown', (e: any) => {
+    dragStart = { x: e.originalEvent.clientX, y: e.originalEvent.clientY };
+  });
   map.on('click', (e: any) => {
+    // ドラッグ開始位置から大きく移動していたらパン操作とみなし、ピンを設置しない
+    if (dragStart) {
+      const dx = e.originalEvent.clientX - dragStart.x;
+      const dy = e.originalEvent.clientY - dragStart.y;
+      if (Math.hypot(dx, dy) > 8) return; // 8px以上動いたら誤操作
+    }
     // 対象範囲外は選択しない
     if (!isInsideWard(e.latlng.lat, e.latlng.lng)) {
       setStatus('選択できるのは新宿区内です', true);
@@ -258,6 +274,40 @@ function initMap() {
     }
     selectProperty('選択した地点（名称なし）', e.latlng.lat, e.latlng.lng);
   });
+}
+
+// ピン位置に戻る「現在地」コントロール（選択中の物件があるときだけ表示）
+function addPinLocateControl() {
+  const ctrl = (L.Control as any).extend({
+    options: { position: 'topright' },
+    onAdd: () => {
+      const btn = L.DomUtil.create('button', 'leaflet-control-locate');
+      btn.type = 'button';
+      btn.title = '選択した物件に戻る';
+      btn.innerHTML = '<span class="locate-ico">◎</span>';
+      // ボタンクリックが地図本体へ伝播してピンが動かないよう、バブリングを止める
+      L.DomEvent.disableClickPropagation(btn);
+      btn.addEventListener('click', (e: any) => {
+        L.DomEvent.stopPropagation(e);
+        if (!current) return;
+        map.flyTo([current.lat, current.lon], Math.max(map.getZoom(), 16), { duration: 0.6 });
+      });
+      // 選択状態に応じて表示/非表示
+      const refresh = () => {
+        btn.style.display = current ? 'flex' : 'none';
+      };
+      refresh();
+      (btn as any)._refresh = refresh;
+      return btn;
+    },
+  });
+  (map as any)._pinLocate = new ctrl().addTo(map);
+}
+
+// 選択状態の変化で現在地ボタンの表示を更新する
+function refreshPinLocate() {
+  const btn = (map as any)?._pinLocate?.getContainer?.();
+  if (btn) btn.style.display = current ? 'flex' : 'none';
 }
 
 // 新宿区の外側（選択不可エリア）を赤い斜線ハッチで覆う
@@ -326,11 +376,12 @@ async function selectProperty(name: string, lat: number, lon: number) {
   current = { lat, lon, name };
   openPanel(name, lat, lon);
   hintEl.classList.add('hidden');
+  refreshPinLocate();
 
   // ピンを即時表示（ネットワーク待ちなし）
+  // 浸水レイヤーは選択地点に依存しないので、ピン操作では消さない（表示状態を維持）
   markerLayer.clearLayers();
   routeLayer.clearLayers();
-  floodLayer.clearLayers();
   const selMarker = L.marker([lat, lon], {
     icon: L.divIcon({
       className: '',
@@ -385,7 +436,6 @@ async function selectProperty(name: string, lat: number, lon: number) {
     renderReport(data);
     renderMap(data);
     renderEvidence(data);
-    void attachSlopeToCards(lat, lon, data);
   } catch (e) {
     reportEl.innerHTML = '';
     setStatus(`データ取得に失敗: ${(e as Error).message}`, true);
@@ -411,13 +461,26 @@ async function loadReview(lat: number, lon: number) {
     if (!res.ok) throw new Error('review failed');
     const data = (await res.json()) as {
       review?: string;
-      facilities?: Record<string, Array<{ name: string; distanceM: number }>>;
+      facilities?: Record<string, Array<{ name: string; lat: number; lon: number; distanceM: number }>>;
     };
     // 改行で段落に分割して表示（途中で切れない・段落が読みやすい）
+    // レビュー内の施設名もクリック可能にする（レスポンスのfacilitiesから座標を解決）
+    const facList = Object.values(data.facilities || {})
+      .flat()
+      .map((f) => ({ name: f.name, lat: f.lat, lon: f.lon }));
     body.innerHTML = (data.review || 'レビューを生成できませんでした')
       .split(/\n{2,}|\n/)
-      .map((para) => `<p>${escapeHtml(para)}</p>`)
+      .map((para) => `<p>${linkifyFacilities(para, facList)}</p>`)
       .join('');
+    // レビュー内の施設名クリック → 経路表示
+    body.querySelectorAll<HTMLButtonElement>('button.fac-link').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.name || '';
+        const lat = Number(btn.dataset.lat);
+        const lon = Number(btn.dataset.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) focusFacilityRoute(name, lat, lon);
+      });
+    });
     // 最寄り駅の徒歩情報を付加
     const stations = data.facilities?.transport?.slice(0, 3) || [];
     if (meta && stations.length) {
@@ -489,12 +552,14 @@ function appendMsg(role: 'user' | 'ai', text: string) {
 }
 
 // AI回答テキスト内の施設名をクリック可能なリンクに変換する
-function linkifyFacilities(text: string): string {
+function linkifyFacilities(text: string, facilities?: Array<{ name: string; lat: number; lon: number }>): string {
   let html = escapeHtml(text).replace(/\n/g, '<br>');
+  // 対象リスト（未指定ならマップ上の施設マーカー）
+  const list = facilities && facilities.length ? facilities : facilityMarkers;
   // 置換後のボタンHTMLが再度マッチしないよう、施設名→プレースホルダで退避してから復元する
   const saved: Array<{ token: string; html: string }> = [];
   // 名前が長い施設から順に置換（短い名前が誤マッチしないよう）
-  const sorted = [...facilityMarkers].sort((a, b) => b.name.length - a.name.length);
+  const sorted = [...list].sort((a, b) => b.name.length - a.name.length);
   for (const fm of sorted) {
     if (!fm.name) continue;
     const nameEsc = escapeHtml(fm.name);
@@ -605,13 +670,11 @@ function renderReport(data: AskResponse) {
           ).join('')
         : '<div class="r-name">周辺に見つかりませんでした</div>';
       if (card.key === 'disaster') {
-        // 地点周辺の浸水想定（河川・高潮）を表示
-        if (data.flood && (data.flood.riverMax > 0 || data.flood.stormMax > 0)) {
-          const river = data.flood.riverMax > 0 ? `河川 ${data.flood.riverMax.toFixed(1)}m` : '';
-          const storm = data.flood.stormMax > 0 ? `高潮 ${data.flood.stormMax.toFixed(1)}m` : '';
-          inner += `<div class="r-flood-risk">浸水想定 最大: ${[river, storm].filter(Boolean).join(' / ')}</div>`;
+        // 地点周辺の浸水想定（河川）を表示
+        if (data.flood && data.flood.riverMax > 0) {
+          inner += `<div class="r-flood-risk">浸水想定 最大: 河川 ${data.flood.riverMax.toFixed(1)}m</div>`;
         }
-        inner += `<button type="button" class="r-flood">浸水想定区域を地図に表示</button>`;
+        inner += `<button type="button" class="r-flood">${floodShown ? '浸水想定区域を非表示' : '浸水想定区域を地図に表示'}</button>`;
       }
     }
 
@@ -690,7 +753,6 @@ const demeritCards: Array<{ title: string; color: string; html: string }> = [];
     sec.appendChild(grid);
     reportEl.appendChild(sec);
   }
-  // 坂道情報（drawRoutes後に反映される）
 }
 
 function renderEvidence(data: AskResponse) {
@@ -722,7 +784,7 @@ function renderEvidence(data: AskResponse) {
   }
 }
 
-let facilityMarkers: Array<{ lat: number; lon: number; marker: any; name: string; cat: string; elevGainM?: number; elevLossM?: number }> = [];
+let facilityMarkers: Array<{ lat: number; lon: number; marker: any; name: string; cat: string }> = [];
 
 function renderMap(data: AskResponse) {
   markerLayer.clearLayers();
@@ -751,10 +813,11 @@ function renderMap(data: AskResponse) {
   });
 
   // アクティブレイヤーに応じてマーカーをフィルタ
+  // マップは散らかり防止のため各カテゴリ上位3件のみ表示（詳細はレポートカードで確認）
   const showAll = activeLayer === 'all';
   for (const key of CAT_ORDER) {
     if (!showAll && key !== activeLayer) continue;
-    for (const f of data.facilities[key] || []) {
+    for (const f of (data.facilities[key] || []).slice(0, 3)) {
       const marker = L.marker([f.lat, f.lon], {
         icon: L.divIcon({
           className: '',
@@ -764,7 +827,7 @@ function renderMap(data: AskResponse) {
         }),
       })
         .addTo(markerLayer)
-        .bindTooltip(`${escapeHtml(f.name)}（${fmtDist(f.distanceM)}） — クリックで経路`, { sticky: true })
+        .bindTooltip(`${escapeHtml(f.name)}`, { sticky: true })
         .on('click', (e: any) => {
           L.DomEvent.stopPropagation(e);
           // アイコンクリック → その施設までの最短経路を表示
@@ -781,28 +844,6 @@ function renderMap(data: AskResponse) {
   // 経路は自動描画しない（アイコン/カードクリック時のみ focusFacilityRoute で表示）
 
   if (c.lat && c.lon) map.setView([c.lat, c.lon], Math.max(map.getZoom(), 15));
-}
-
-// 買い物・交通カードの各施設に、そこまでの経路の坂道情報を付与する
-async function attachSlopeToCards(lat: number, lon: number, data: AskResponse) {
-  if (!router) return; // 道路グラフ未ロードならスキップ（後でfocusFacilityRouteで表示）
-  // ルーターがまだ無ければ待つ（ロード完了後に再実行）
-  for (const key of ['shopping', 'transport'] as const) {
-    for (const f of data.facilities[key] || []) {
-      const r = router.route(lat, lon, f.lat, f.lon);
-      if (!r) continue;
-      if (r.elevGainM <= 5) continue; // 大きな坂道のみ表示
-      const btn = reportEl.querySelector<HTMLButtonElement>(
-        `.r-fac[data-name="${CSS.escape(f.name)}"]`,
-      );
-      if (btn && !btn.querySelector('.r-slope')) {
-        const span = document.createElement('span');
-        span.className = 'r-slope';
-        span.textContent = ` 坂道 上り${Math.round(r.elevGainM)}m / 下り${Math.round(r.elevLossM)}m`;
-        btn.appendChild(span);
-      }
-    }
-  }
 }
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -894,7 +935,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePanel();
 });
 
-let floodCells: Array<{ lat: number; lon: number; depth: number; type?: string }> | null = null;
+let floodCells: Array<{ lat: number; lon: number; depth: number }> | null = null;
 let floodShown = false;
 
 // 洪水レイヤーを表示/非表示トグル（災害カードから呼ぶ）
@@ -903,78 +944,63 @@ async function toggleFlood() {
     floodLayer.clearLayers();
     floodShown = false;
     setStatus('浸水想定区域を非表示にしました');
-    return;
-  }
-  if (!floodCells) {
-    try {
-      const res = await fetch('/api/flood');
-      if (res.ok) floodCells = await res.json();
-    } catch {
-      floodCells = [];
+  } else {
+    if (!floodCells) {
+      try {
+        const res = await fetch('/api/flood');
+        if (res.ok) floodCells = await res.json();
+      } catch {
+        floodCells = [];
+      }
+    }
+    if (floodCells && floodCells.length) {
+      drawFlood(floodCells);
+      floodShown = true;
+      setStatus('浸水想定区域を表示（出典: 東京都建設局 神田川流域浸水予想区域図）');
+    } else {
+      floodLayer.clearLayers();
+      setStatus('浸水想定区域データがありません');
     }
   }
-  if (floodCells && floodCells.length) {
-    drawFlood(floodCells);
-    floodShown = true;
-    const hasStorm = floodCells.some((c) => c.type === 'storm');
-    setStatus(`浸水想定区域を表示（青=河川浸水${hasStorm ? '・オレンジ=高潮' : ''}。出典: 東京都建設局 神田川流域浸水予想区域図${hasStorm ? '・東京都港湾局 高潮浸水想定区域図' : ''}）`);
-  } else {
-    floodLayer.clearLayers();
-    setStatus('浸水想定区域データがありません');
-  }
-  // ボタンの表示を更新
+  // ボタンの表示を両分岐で必ず更新（トグル状態と一致させる）
   document.querySelectorAll<HTMLButtonElement>('.r-flood').forEach((b) => {
     b.textContent = floodShown ? '浸水想定区域を非表示' : '浸水想定区域を地図に表示';
   });
 }
 
 // マーチングスクエアで浸水深の等高線ポリゴンをなめらかに描画する
-function drawFlood(cells: Array<{ lat: number; lon: number; depth: number; type?: string }>) {
+function drawFlood(cells: Array<{ lat: number; lon: number; depth: number }>) {
   floodLayer.clearLayers();
-  // typeごとに色を分ける（河川=青系、高潮=オレンジ/赤系）
-  const typeColors: Record<string, string> = {
-    river: '#2a6db5',
-    storm: '#c2402a',
-  };
-  const floodTypes: string[] = [];
-  for (const c of cells) {
-    const t = c.type || 'river';
-    if (!floodTypes.includes(t)) floodTypes.push(t);
-  }
+  // グリッドへ展開
+  const grid = new Map<string, number>();
+  for (const c of cells) grid.set(`${c.lat},${c.lon}`, c.depth);
+  const lats = [...new Set(cells.map((c) => c.lat))].sort((a, b) => a - b);
+  const lons = [...new Set(cells.map((c) => c.lon))].sort((a, b) => a - b);
+  const dLat = lats[1] - lats[0] || 0.001;
+  const dLon = lons[1] - lons[0] || 0.001;
 
-  for (const type of floodTypes) {
-    const typeCells = cells.filter((c) => (c.type || 'river') === type);
-    // グリッドへ展開
-    const grid = new Map<string, number>();
-    for (const c of typeCells) grid.set(`${c.lat},${c.lon}`, c.depth);
-    const lats = [...new Set(typeCells.map((c) => c.lat))].sort((a, b) => a - b);
-    const lons = [...new Set(typeCells.map((c) => c.lon))].sort((a, b) => a - b);
-    const dLat = lats[1] - lats[0] || 0.001;
-    const dLon = lons[1] - lons[0] || 0.001;
+  const base = '#2a6db5'; // 河川浸水（青系）
+  // 閾値クラス: [下限, 色]
+  const classes: Array<[number, string]> = [
+    [0.5, `${base}88`],
+    [1.0, `${base}AA`],
+    [2.0, `${base}CC`],
+    [5.0, `${base}EE`],
+  ];
 
-    const base = typeColors[type] || '#2a6db5';
-    // 閾値クラス: [下限, 色]
-    const classes: Array<[number, string]> = [
-      [0.5, `${base}88`],
-      [1.0, `${base}AA`],
-      [2.0, `${base}CC`],
-      [5.0, `${base}EE`],
-    ];
-
-    for (const [threshold, color] of classes) {
-      const rings = marchingSquares(grid, lats, lons, dLat, dLon, threshold);
-      for (const ring of rings) {
-        if (ring.length < 3) continue;
-        // 浸水区域はクリック不可（視覚表示のみ）
-        L.polygon(ring, {
-          color: `${base}55`,
-          weight: 1,
-          fillColor: color,
-          fillOpacity: 1,
-          className: 'flood-zone',
-          interactive: false,
-        }).addTo(floodLayer);
-      }
+  for (const [threshold, color] of classes) {
+    const rings = marchingSquares(grid, lats, lons, dLat, dLon, threshold);
+    for (const ring of rings) {
+      if (ring.length < 3) continue;
+      // 浸水区域はクリック不可（視覚表示のみ）
+      L.polygon(ring, {
+        color: `${base}55`,
+        weight: 1,
+        fillColor: color,
+        fillOpacity: 1,
+        className: 'flood-zone',
+        interactive: false,
+      }).addTo(floodLayer);
     }
   }
 }
@@ -1096,12 +1122,11 @@ async function loadRouter() {
     if (!res.ok) throw new Error('道路データ取得失敗');
     const graph = (await res.json()) as RoadGraph;
     router = new Router(graph);
-    // ルーター準備後に、選択中の物件があれば坂道情報を再反映
+    // ルーター準備後に、選択中の物件があれば経路を再描画
     if (current) {
       try {
         const data = await ask({ lat: current.lat, lon: current.lon });
         renderMap(data);
-        void attachSlopeToCards(current.lat, current.lon, data);
       } catch {
         // 無視
       }

@@ -42,10 +42,15 @@ export interface EmergencyShelter {
   distanceM: number;
   flood: boolean;
   landslide: boolean;
-  stormSurge: boolean;
   earthquake: boolean;
   fire: boolean;
   capacity: number | null;
+}
+
+export interface ElevationInfo {
+  startElev: number; // 選択地点の標高(m)
+  // 各施設の標高と、選択地点からの差（正=施設が高い・登る）
+  facilities: Array<{ name: string; cat: Category; elev: number; diff: number }>;
 }
 
 export interface AnswerFacts {
@@ -54,12 +59,13 @@ export interface AnswerFacts {
   rules: Rule[];
   risk?: { town: string; collapseRank: number; fireRank: number; totalRank: number } | null;
   crime?: { town: string; totalCrimes: number; year: number } | null;
-  flood?: { riverMax: number; stormMax: number } | null;
+  flood?: { riverMax: number } | null;
   demographics?: Demographics | null;
   aed?: NearbyFacility[] | null;
   toilets?: NearbyFacility[] | null;
   parks?: NearbyFacility[] | null;
   emergencyShelters?: EmergencyShelter[] | null;
+  elevation?: ElevationInfo | null;
   schoolZone?: string | null;
 }
 
@@ -313,7 +319,7 @@ export async function queryEmergencyShelters(
   const b = bbox(lat, lon, 2000);
   const res = await db
     .prepare(
-      `SELECT name, lat, lon, flood, landslide, storm_surge, earthquake, fire, capacity
+      `SELECT name, lat, lon, flood, landslide, earthquake, fire, capacity
        FROM emergency_shelters WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?`,
     )
     .bind(b.south, b.north, b.west, b.east)
@@ -326,7 +332,6 @@ export async function queryEmergencyShelters(
       distanceM: haversineM(lat, lon, s.lat, s.lon),
       flood: !!s.flood,
       landslide: !!s.landslide,
-      stormSurge: !!s.storm_surge,
       earthquake: !!s.earthquake,
       fire: !!s.fire,
       capacity: s.capacity,

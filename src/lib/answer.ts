@@ -87,11 +87,8 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
     );
   }
   if (topic === 'disaster') {
-    if (facts.flood) {
-      const river = facts.flood.riverMax > 0 ? `河川浸水想定最大${facts.flood.riverMax.toFixed(1)}m` : '';
-      const storm = facts.flood.stormMax > 0 ? `高潮浸水想定最大${facts.flood.stormMax.toFixed(1)}m` : '';
-      const both = [river, storm].filter(Boolean).join('、');
-      if (both) lines.push(`浸水想定（選択地点周辺500mの最大値）: ${both}（出典: 東京都建設局 神田川流域浸水予想区域図 / 東京都港湾局 高潮浸水想定区域図）`);
+    if (facts.flood && facts.flood.riverMax > 0) {
+      lines.push(`浸水想定（選択地点周辺500mの最大値）: 河川浸水想定最大${facts.flood.riverMax.toFixed(1)}m（出典: 東京都建設局 神田川流域浸水予想区域図）`);
     }
     for (const f of facts.facilities.disaster || []) {
       lines.push(`避難所: ${f.name}（${formatDistance(f.distanceM)}）`);
@@ -100,7 +97,6 @@ export function extractTopicFacts(facts: AnswerFacts, topic: Topic): string {
       const types = [
         s.flood ? '洪水' : '',
         s.landslide ? '崖崩れ' : '',
-        s.stormSurge ? '高潮' : '',
         s.earthquake ? '地震' : '',
         s.fire ? '大規模火事' : '',
       ].filter(Boolean).join('・');
@@ -185,9 +181,8 @@ export function buildContext(facts: AnswerFacts): string {
   }
   if (facts.flood) {
     const river = facts.flood.riverMax > 0 ? `河川浸水想定最大${facts.flood.riverMax.toFixed(1)}m` : '河川浸水想定なし';
-    const storm = facts.flood.stormMax > 0 ? `高潮浸水想定最大${facts.flood.stormMax.toFixed(1)}m` : '高潮浸水想定なし';
     parts.push(
-      `【浸水想定（選択地点周辺500mの最大値）】${river}、${storm}（出典: 東京都建設局 神田川流域浸水予想区域図 / 東京都港湾局 高潮浸水想定区域図）`,
+      `【浸水想定（選択地点周辺500mの最大値）】${river}（出典: 東京都建設局 神田川流域浸水予想区域図）`,
     );
   }
   // 町丁目プロフィール（人口構成・学区・生活快適データ）
@@ -220,7 +215,6 @@ export function buildContext(facts: AnswerFacts): string {
     const types = [
       s.flood ? '洪水' : '',
       s.landslide ? '崖崩れ' : '',
-      s.stormSurge ? '高潮' : '',
       s.earthquake ? '地震' : '',
       s.fire ? '大規模火事' : '',
     ].filter(Boolean).join('・');

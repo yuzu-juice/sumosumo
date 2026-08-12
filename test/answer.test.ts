@@ -51,7 +51,7 @@ const facts: AnswerFacts = {
   },
   aed: [{ name: '区役所', lat: 35.6938, lon: 139.7034, distanceM: 10 }],
   emergencyShelters: [
-    { name: '新宿御苑', lat: 35.6865, lon: 139.7149, distanceM: 688, flood: false, landslide: false, stormSurge: false, earthquake: true, fire: false, capacity: null },
+    { name: '新宿御苑', lat: 35.6865, lon: 139.7149, distanceM: 688, flood: false, landslide: false, earthquake: true, fire: false, capacity: null },
   ],
   schoolZone: '花園',
 };

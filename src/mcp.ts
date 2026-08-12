@@ -178,7 +178,7 @@ export function buildMcpServer(env: Env): McpServer {
     'get_flood',
     {
       description:
-        '住所または緯度経度を基点に、周辺500m内の浸水想定リスク（河川・高潮の最大浸水深メートル）を取得する。0の場合は該当リスクなし。',
+        '住所または緯度経度を基点に、周辺500m内の浸水想定リスク（河川浸水の最大浸水深メートル）を取得する。0の場合は該当リスクなし。',
       inputSchema: z
         .object({
           address: z.string().optional().describe('住所（lat/lon未指定時は必須）'),
@@ -200,8 +200,7 @@ export function buildMcpServer(env: Env): McpServer {
         };
       }
       const river = flood.riverMax > 0 ? `河川浸水想定最大 ${flood.riverMax.toFixed(1)}m` : '河川浸水想定なし';
-      const storm = flood.stormMax > 0 ? `高潮浸水想定最大 ${flood.stormMax.toFixed(1)}m` : '高潮浸水想定なし';
-      const text = `${river}、${storm}（周辺500m内の最大値、出典: 東京都建設局/東京都港湾局）`;
+      const text = `${river}（周辺500m内の最大値、出典: 東京都建設局 神田川流域浸水予想区域図）`;
       return { content: [{ type: 'text', text }], structuredContent: { center, flood } };
     },
   );
@@ -244,7 +243,7 @@ export function buildMcpServer(env: Env): McpServer {
     'get_shelters',
     {
       description:
-        '住所または緯度経度を基点に、周辺2km内の指定緊急避難場所を災害種別（洪水/崖崩れ/高潮/地震/大規模火事）付きで取得する。',
+        '住所または緯度経度を基点に、周辺2km内の指定緊急避難場所を災害種別（洪水/崖崩れ/地震/大規模火事）付きで取得する。',
       inputSchema: z
         .object({
           address: z.string().optional().describe('住所（lat/lon未指定時は必須）'),
@@ -269,7 +268,6 @@ export function buildMcpServer(env: Env): McpServer {
         const types = [
           s.flood ? '洪水' : '',
           s.landslide ? '崖崩れ' : '',
-          s.stormSurge ? '高潮' : '',
           s.earthquake ? '地震' : '',
           s.fire ? '大規模火事' : '',
         ].filter(Boolean).join('・');

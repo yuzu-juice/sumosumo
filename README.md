@@ -2,7 +2,7 @@
 
 **物件住所を基点に、暮らしの事実をオープンデータから根拠付きで答える不動産AI。**
 
-普通の不動産サイトに載っていない「込み入ったこと」— 洪水・高潮リスクの確認方法、避難所への距離、夜間診療、最寄り駅、買い物環境、子育て環境 — を、東京都・新宿区の公式オープンデータから、出典と更新日付きで提示します。**総合スコアは出しません。事実のみ**を提示します。
+普通の不動産サイトに載っていない「込み入ったこと」— 洪水リスクの確認方法、避難所への距離、夜間診療、最寄り駅、買い物環境、子育て環境 — を、東京都・新宿区の公式オープンデータから、出典と更新日付きで提示します。**総合スコアは出しません。事実のみ**を提示します。
 
 東京都オープンデータハッカソン2026への提出作品。Cloudflare完結（Workers + D1 + R2 + Cron + Workers AI）。
 
@@ -18,9 +18,8 @@
 - **町丁目プロフィール**: 年齢構成人口・世帯数・通学区域・AED・公園を物件地点ごとに表示
 - **徒歩時間ベースの距離制限**: カテゴリごとの徒歩圏（例: 避難所=徒歩15分、駅=徒歩20分）で意味のある施設のみ表示
 - **地図UI**: 全画面マップ。クリックでピンを配置し、ドラッグで位置を微調整
-- **浸水レイヤー**: 河川浸水（青）と高潮浸水（オレンジ）を色分けして表示
+- **浸水レイヤー**: 河川浸水想定区域をなめらかな輪郭で表示
 - **A*経路探索**: 選択物件から施設までの道路網上の最短経路を描画
-- **坂道・標高情報**: 経路の累計上り/下り・標高差を表示
 - **自前地図タイル**: 新宿区のタイルをR2に収集し自前配信
 - **MCP**: `/mcp` でD1データを読むMCPサーバーを公開
 - **実行時の外部API依存ゼロ**: アプリ実行中はD1/R2のみ参照
@@ -42,15 +41,13 @@
 | 9 | 東京都 都市公園・都立公園一覧 | 東京都 | https://www.opendata.metro.tokyo.lg.jp/shinjyuku/131041_shinjukuku_toshitoritukouen.csv |
 | 10 | OpenStreetMap 施設・道路・建物データ | OpenStreetMap | https://www.openstreetmap.org/copyright |
 
-補助データ（避難所・浸水・高潮・公衆トイレ・標高・行政境界など）も利用しています:
+補助データ（避難所・浸水・公衆トイレ・行政境界など）も利用しています:
 - 東京都防災マップ 避難所: https://www.opendata.metro.tokyo.lg.jp/soumu/130001_evacuation_center.csv
 - 神田川流域浸水予想区域図: https://www.opendata.metro.tokyo.lg.jp/kensetsu/R3/shinsui_kandagawa.csv
-- 高潮浸水想定区域図: https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d0000000029
 - 新宿区 公衆トイレ一覧: https://www.city.shinjuku.lg.jp/content/000399974.csv
-- 標高タイル: https://maps.gsi.go.jp/development/ichiran.html
 - 新宿区 行政境界（OpenStreetMap）
 
-浸水想定区域データは、東京都の「浸水予想区域図」を利用しています。このデータは**川からの溢水（外水氾濫）と下水道の能力超過による窪地の浸水（内水氾濫）の両方**を含む統合浸水深です（東京都公式notesより）。高潮は東京都港湾局の「高潮浸水想定区域図（想定最大規模）」を、新宿区行政境界内のグリッドで抽出して利用しています。
+浸水想定区域データは、東京都の「浸水予想区域図」を利用しています。このデータは**川からの溢水（外水氾濫）と下水道の能力超過による窪地の浸水（内水氾濫）の両方**を含む統合浸水深です（東京都公式notesより）。
 
 ## アーキテクチャ
 
@@ -89,7 +86,6 @@ npx wrangler r2 bucket create odh-raw  # R2作成（初回のみ、既存なら�
 | 新宿区公式（医療/公共/教育/子育て） | `npm run collect:official` | 手動 |
 | OSM施設（駅・店舗・病院） | `npm run collect:osm` | 手動（週次推奨） |
 | 道路ネットワーク（A*経路） | `npm run collect:roads` | 手動 |
-| 道路ノード標高（坂道表示） | `npm run add:elev` | collect:roads後 |
 | 地図タイル（自前配信） | `npm run collect:tiles` | 手動 |
 | 浸水想定区域（洪水レイヤー） | `npm run collect:flood` | 手動 |
 | 町丁目プロフィール（人口/AED/公園/避難場所/学区） | `npm run collect:profile` | 手動 |
@@ -138,7 +134,7 @@ MCPクライアント（Claude Desktop等）から接続する場合:
 - `get_rules` — 新宿区の生活ルール（ごみ・災害・医療）
 - `get_risk` — 最寄り町丁目の地震地域危険度ランク
 - `get_crime` — 最寄り町丁目の犯罪認知件数
-- `get_flood` — 周辺の浸水想定リスク（河川・高潮）
+- `get_flood` — 周辺の浸水想定リスク（河川）
 - `get_demographics` — 最寄り町丁目の人口・年齢構成
 - `get_shelters` — 周辺の指定緊急避難場所（災害種別付き）
 - `get_school_zone` — 最寄り町丁目の通学区域（小学校）
@@ -168,4 +164,14 @@ public/                # 静的アセット
 migrations/            # D1マイグレーション + シード
 scripts/               # データ収集・住所辞書構築スクリプト
 test/                  # vitest
+docs/pitch/            # ピッチ用スライド（Marp, 2分・5枚）
 ```
+
+## ピッチ資料
+
+- スライド: `docs/pitch/slides.html`（ブラウザで開いて全画面・矢印キーで送り）
+- ソース: `docs/pitch/slides.md`（Marp形式）
+- 台本: 2分・1人のデモ台本はスライド本文に即して構成済み
+
+再生成: `cd docs/pitch && npx -y @marp-team/marp-cli slides.md -o slides.html`
+PDF化: `slides.html` をブラウザで開き、印刷→PDF保存（環境にChromeが必要）

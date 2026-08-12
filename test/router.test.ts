@@ -35,7 +35,6 @@ describe('Router', () => {
     expect(route).not.toBeNull();
     expect(route!.distanceM).toBeCloseTo(3 * haversine(35.0, 139.0, 35.001, 139.0), 0);
     expect(route!.path.length).toBeGreaterThanOrEqual(4);
-    expect(route!.elevGainM).toBeGreaterThanOrEqual(0);
   });
 
   it('孤立成分のノードを避けてメイン成分を使う', () => {

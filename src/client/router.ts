@@ -6,9 +6,6 @@ export interface RoadGraph {
 export interface RouteResult {
   path: Array<[number, number]>; // [lat, lon] の軌跡
   distanceM: number;
-  elevGainM: number; // 累計上り(m)
-  elevLossM: number; // 累計下り(m)
-  elevDiffM: number; // 標高差(終点-始点, m)
 }
 
 export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -123,25 +120,13 @@ export class Router {
     }
     nodeIdx.reverse();
 
-    // 標高差・累計上り/下り
-    let elevGainM = 0;
-    let elevLossM = 0;
+    // 経路復元（座標列のみ）
     const path: Array<[number, number]> = [];
     for (let i = 0; i < nodeIdx.length; i++) {
       const node = this.graph.nodes[nodeIdx[i]];
       path.push([node[1], node[2]]);
-      if (i > 0) {
-        const prevNode = this.graph.nodes[nodeIdx[i - 1]];
-        const e1 = prevNode[3] ?? 0;
-        const e2 = node[3] ?? 0;
-        const d = e2 - e1;
-        if (d > 0) elevGainM += d;
-        else elevLossM += -d;
-      }
     }
-    const startElev = this.graph.nodes[nodeIdx[0]][3] ?? 0;
-    const endElev = this.graph.nodes[nodeIdx[nodeIdx.length - 1]][3] ?? 0;
-    return { path, distanceM: gScore[goal], elevGainM, elevLossM, elevDiffM: endElev - startElev };
+    return { path, distanceM: gScore[goal] };
   }
 
   // メイン道路網（最大連結成分）内の最近ノードを選ぶ
