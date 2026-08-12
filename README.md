@@ -113,6 +113,22 @@ npm run deploy     # 型チェック + クライアントビルド + wrangler de
 
 Cron Trigger（毎日3:00）は `wrangler.jsonc` の `triggers.crons` で定義済み。
 
+## CI/CD
+
+GitHub Actions（`.github/workflows/ci.yml`）で自動実行:
+
+| ジョブ | 内容 | トリガー |
+|---|---|---|
+| check | 型チェック + テスト | push/PR |
+| build-slides | スライドHTMLビルド（5枚以上検証） | push/PR |
+| deploy | Cloudflare Workers にデプロイ | mainへのpushのみ |
+
+GitHub のリポジトリ設定に以下のシークレットが必要です:
+- `CLOUDFLARE_API_TOKEN` — Workers デプロイ権限のあるAPIトークン
+- `CLOUDFLARE_ACCOUNT_ID` — Cloudflare アカウントID
+
+スライドの再生成はローカルでも可能: `npm run build:slides`
+
 ## MCP
 
 MCPクライアント（Claude Desktop等）から接続する場合:
