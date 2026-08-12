@@ -11,8 +11,8 @@ jobs:
     name: Build Slides
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -21,3 +21,9 @@ jobs:
         run: npm run build:slides
       - name: Verify slides HTML was generated
         run: test -s docs/pitch/slides.html
+      - name: Upload slides as artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: slides
+          path: docs/pitch/slides.html
+          if-no-files-found: error
