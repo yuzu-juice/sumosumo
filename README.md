@@ -115,7 +115,7 @@ Cron Trigger（毎日3:00）は `wrangler.jsonc` の `triggers.crons` で定義�
 
 ## CI（スライドビルド）
 
-GitHub Actions（`.github/workflows/ci.yml`）で、push/PRのたびにスライドHTMLを自動ビルドし、5枚以上生成されるか検証します。シークレット設定は不要です。
+GitHub Actions（`.github/workflows/ci.yml`）で、push/PRのたびにスライドHTMLを自動ビルドし、生成を検証します。シークレット設定は不要です。
 
 スライドの再生成はローカルでも可能: `npm run build:slides`
 
